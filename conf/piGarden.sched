@@ -1,0 +1,15 @@
+#piGarden.sched config file 
+#author: androtto
+#version 0.3.0
+#format file
+#1st field;2nd field;3rd field;4th field;5th field
+#EV?_alias;duration;time;every_X_days;active|inactive
+#EV?_alias;duration;EV?_previous
+#time is HH:MM 24h format
+#every_X_days means daily frequency, 1= every day, 2=every three days (first yes, second no)),3= every three days (first yes, second and third no), etc...
+EV1_ALIAS;15;10:01;1;active
+EV2_ALIAS;15;EV1_ALIAS;;
+EV3_ALIAS;15;EV2_ALIAS;;
+EV4_ALIAS;15;EV3_ALIAS;;
+EV5_ALIAS;15;16:00;3;active
+EV6_ALIAS;10;08:00;1;inactive

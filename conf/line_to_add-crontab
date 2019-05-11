@@ -1,0 +1,1 @@
+* * * * * /home/pi/piGardenSched/piGardenSched.sh >> /home/pi/piGardenSched/log/piGardenSched.log 2>&1

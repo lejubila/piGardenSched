@@ -1,0 +1,613 @@
+VERSIONE 0.3.1
+--------------
+piGardenSched.sh e' un'alternativa allo schedulatore di piGarden basato sul crontab.
+Si consiglia di installarlo sotto la home dell'utente pi, quindi il percorso del package sara' /home/pi/piGardenSched
+
+Possiamo dividere in 2 aree di funzionamento:
+* gestione file di schedulazione
+* esecuzione delle schedulazioni
+
+Le vedremo nel dettaglio successivamente.
+
+STRUTTURA DEL PACCHETTO:
+------------------------
+Una volta installato potete trovare il seguente contenuto (nota: orari e dimensione potrebbero essere differenti nel caso di versioni successive):
+	drwxr-xr-x 2 pi pi 4096 Apr 28 16:29 conf
+	drwxr-xr-x 2 pi pi 4096 Apr 28 16:30 include
+	-rwxr-xr-x 1 pi pi 5918 Apr 28 15:51 piGardenSched.sh
+	-rw-r--r-- 1 pi pi  907 Apr 27 00:36 README
+in conf potete trovare alcuni esempi, tra cui il file di configurazione, la cui funzione e' spiegata di seguito.
+in /home/pi/piGardenSched/include vi sono tutte le funzioni suddivise per tipologia (cron, rain e generali functions), oltre agli script che vengono eseguiti con la partenza dell'irrigazione (irrigating.sh) e la gestione delle attese tra open/close e contestuale verifica dello stato della pioggia (raincheck-waitloop.sh):
+	-rw-r--r-- 1 pi pi   730 Apr 28 15:52 cron.include.sh
+	-rw-r--r-- 1 pi pi 26637 Apr 28 16:30 functions.include.sh
+	-rwxr-xr-x 1 pi pi  1903 Apr 28 00:43 irrigating.sh
+	-rwxr-xr-x 1 pi pi  2074 Apr 27 00:35 raincheck-waitloop.sh
+	-rw-r--r-- 1 pi pi  5002 Apr 26 23:58 rain.include.sh
+Al primo avvio verranno create le directory:
+	drwxr-xr-x 2 pi pi 4096 Apr 28 15:40 log
+	drwxr-xr-x 2 pi pi 4096 Apr 28 00:22 state
+	drwxr-xr-x 2 pi pi 4096 Apr 28 15:39 tmp
+Nella directory log troveremo ogni volta che viene lanciato da crontab (vedi successivamente per spiegazione dettagliata) il log principale (piGardenSched.log); troveremo inoltre un file di log per ogni combinazione di EV+orario di esecuzione (ZONA1_pratoSud-10:00.log).
+in state vengono registrate le attività di ogni EV schedulata nella sua ultima esecuzione (ZONA1_pratoSud-10:00.lastrun) e il suo storico (ZONA1_pratoSud-10:00.history)
+E' anche presente lo storico di ogni EV effettivamente aperta con l'orario e la durata (ZONA1_pratoSud-irrigationhistory).
+Più avanti vedremo quali sono le opzioni da passare a piGardenSched per consultare ed interpretare tali file di stato.
+Infine in tmp vi sono i file temporanei creati/impiegati da piGardenSched durante il suo funzionamento.
+
+ATTIVAZIONE
+-----------
+Per poter essere attivato piGardenSched deve essere a sua volta presente in crontab.
+Esistono 3 opzioni per la gestione della propria entry in crontab da parte di piGardenSched.sh e sono:
+	cronadd crondel croncheck
+con la conseguente azione facilmente comprensibile.
+La prima cosa da fare ovviamente è copiare piGardenSched.conf da /home/pi/piGardenSched/conf/piGardenSched.conf, con il seguente comando:
+	pi@raspberrypi:~/piGardenSched $ sudo cp conf/piGardenSched.conf /etc
+successivamente attivare la entry in crontab:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh croncheck
+	ERROR: crontab entry for piGardenSched.sh NOT found
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh cronadd
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh croncheck
+	NORMAL: crontab entry for piGardenSched.sh found
+	pi@raspberrypi:~/piGardenSched $ crontab -l |grep piGardenSched
+	* * * * * /home/pi/piGardenSched/piGardenSched.sh >> /home/pi/piGardenSched/log/piGardenSched.log 2>&1
+	pi@raspberrypi:~/piGardenSched $
+
+FILE DI CONFIGURAZIONE
+----------------------
+/etc/piGardenSched.conf e' il file di configurazione.
+Deve essere presente, altrimenti lo script non parte.
+Ecco il contenuto del file:
+	# pigarden config file	
+	# Author: androtto
+
+	verbose="no" # yes|no
+
+	PIGARDENSCHED=/etc/piGarden.sched
+
+	PIGARDEN_HOME="/home/pi/piGarden"
+	STATUS_DIR="$PIGARDEN_HOME/state"
+
+	#integration with drv_rainsensorqty
+	RAINSENSORQTY_LASTRAIN="$STATUS_DIR/rainsensorqty_lastrain"
+	RAINSENSORQTY_HISTORY="$STATUS_DIR/rainsensorqty_history"
+
+	# activate integration with drv_rainsensorqty
+	autostoprain=yes  # yes|no
+	autodelayrain=yes # yes|no
+
+	# set 0 for leave enabled autostoprain (if set to yes) for each EV
+	# set 1 for override autostoprain and leave active even if it will be raining
+	EV1_NORAIN_RAINSENSORQTY=0
+	EV2_NORAIN_RAINSENSORQTY=0
+	EV3_NORAIN_RAINSENSORQTY=0
+	EV4_NORAIN_RAINSENSORQTY=0
+	EV5_NORAIN_RAINSENSORQTY=0
+	EV6_NORAIN_RAINSENSORQTY=0
+
+(ulteriori entry per ogni EV come la precedente se ne avete piu' di 6 come nell'esempio)
+
+breve spiegazione di ciascuna entry
+
+verbose consente di aumentare il livello di informazioni nell'esecuzione dello script. Per esempio, con verbose=no, non viene visualizzato (e quindi riversato nel log) nessun output quando viene lanciato piGardenSched.sh se non vi sono schedulazioni. Con verbose=yes viene ad esempio visualizzato l'output "16:30:59-28/04/19 NORMAL: no irrigation run at 16:30".
+
+PIGARDEN_HOME  STATUS_DIR sono relative rispettivamente alla home di piGarden e alla sua sottodirectory state. 
+Queste variabili servono per le due successive: RAINSENSORQTY_LASTRAIN RAINSENSORQTY_HISTORY utili per l'integrazione con il driver RAINSENSORQTY.
+
+autostoprain consente l'interruzione della pioggia - usando la componente opzionale drv_rainsensorqty - durante l'irrigazione.
+per poter fare cio' deve essere disattivata l'integrazione con il sistema di rilevazione pioggia integrato in piGarden, quindi in /etc/piGarden.conf ciascuna valvola deve riportare l'entry come la seguente:
+	EV1_NORAIN=1 #         Non interrompe l'irrigazione di questa zona in caso di pioggia
+piGardenSched considera tale gestione pioggia la CLASSIC mentre quella opzionale QTY. I messaggi che verranno eventualmente segnalati conterranno informazioni delle variabili gestite da piGardenSched le quali sono EVNORAINQTY e EVNORAINCLASSIC
+Se vi fossero dei conflitti sulle impostazioni per la gestione della pioggia, piGardenSched le segnala.
+E' possibile disattivare il comportamento autostoprain per ogni EV con le variabili EV1_NORAIN_RAINSENSORQTY (o similare con numero cambiato, es. EV2_NORAIN_RAINSENSORQTY ecc.)
+
+autodelayrain permette il ritardo automatico della schedulazione se vi sono state delle pioggie nei giorni precedenti tra il momento dell'irrigazione e la precedente.
+Ad esempio, se il prato viene irrigato ogni 3 gg alle 10.30 e la precedente irrigazione e' avvenuta il 5 aprile/10.30 la successiva sarebbe l'8 aprile/10.30
+Se l'ultima pioggia fosse stata il 7 aprile/10.00, l'irrigazione verrebbe ritardata di 2 gg, quindi il 10 aprile/10.30
+Se invece fosse stata il 7 aprile/11.00 (nelle 24 ore precedenti alla schedulazione dell'8 aprile/10.30 ), verrebbe rimandata di 3gg, l'11 aprile/10.30
+Ad oggi non esiste il controllo di autodelayrain solo per ciascuna EV. E' una variabile globale.
+
+IL FILE DI SCHEDULAZIONE
+------------------------
+/etc/piGarden.sched e' il file di schedulazione. Alla prima esecuzione piGardenSched.sh crea il file configurazione vuoto.
+E' possibile popolarlo editandolo manualmente anche se sconsigliato, in quanto potrebbero verificarsi errori di sintassi.
+
+Vi sono diverse opzioni che servono per popolare il file di schedulazione. Le vediamo di seguito ad una ad una con il corrispondente output.
+E' sempre possibile eseguire ./piGardenSched.sh help per avere un riepilogo delle diverse opzioni presenti.
+
+La prima opzione che vediamo e' add. Serve per inserire una entry. Con piGardenSched.sh si fa riferimento alle EV con il nome alias, ovvero EV1_ALIAS, EV2_ALIAS e cosi' via. 
+La prima esecuzione con parametri insufficienti - crea nel comtempo il file di configurazione vuoto:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh add EV1_ALIAS 
+	WARNING: piGarden_sched Config file not found in /etc/piGarden.sched
+	creating empty file
+	18:38:42-24/04/19 -e ERROR: 4 parameters needed
+	piGardenSched.sh add ev?_alias duration time frequency
+	pi@raspberrypi:~/piGardenSched $
+Con i parametri corretti: cioe' il nome della EV; la durata in minuti dell'irrigazione; l'orario di schedulazione; e la frequenza in giorni, 1 significa ogni giorno; due ogni due giorni (1 si' e 1 no), e cosi' via.
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh add EV1_ALIAS 20 14:00 1
+	18:39:10-24/04/19 SUCCESS adding new schedule for EV1_ALIAS
+	pi@raspberrypi:~/piGardenSched $
+E' sempre possibile verificare il contenuto del file eseguendo il comando:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;20;14:00;1;active
+	pi@raspberrypi:~/piGardenSched $
+Lo si puo' anche visualizzare direttamente, ma verranno visualizzati anche i commenti:
+	pi@raspberrypi:~/piGardenSched $ cat /etc/piGarden.sched
+	#piGarden.sched config file 
+	#author: androtto
+	#version 0.2.1
+	#format file
+	#1st field;2nd field;3rd field;4th field;5th field
+	#EV?_alias;duration;time;every_X_days;active|inactive
+	#EV?_alias;duration;EV?_previous
+	#time is HH:MM 24h format
+	#every_X_days means daily frequency, 1= every day, 2=every three days (first yes, second no)),3= every three days (first yes, second and third no), 	etc...
+	EV1_ALIAS;20;14:00;1;active
+	pi@raspberrypi:~/piGardenSched $
+piGardenSched gestisce l'irrigazione sequenziale concatenando in sequenza le EV specificate attraverso l'opzione seq. Viene quindi schedulata solo la prima EV e le successive verranno comandate in sequenza.
+La sequenza deve coincidere con l'ordine numerico; cioè possono essere in sequenza le EV 1 2 3 4, oppure le 3 4 5, ma non le 4 3 6, ne' 2 3 5.
+Per poter funzionare il comando, la prima EV deve essere presente.
+Ad esempio, pur essendo corretta la sequenza del comando successivo, va in errore perche' EV2 non e' presente:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh seq EV2_ALIAS EV3_ALIAS EV4_ALIAS
+	00:02:38-29/04/19 ERROR:first member EV2_ALIAS of sequence NOT found
+	pi@raspberrypi:~/piGardenSched $
+Mentre e' corretta la prossima esecuzione, per la quale, non essendo gia' presenti le EV 2 3 e 4, la durata di apertura viene ereditata dalla EV1 (20 minuti):
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh seq EV1_ALIAS EV2_ALIAS EV3_ALIAS EV4_ALIAS
+	18:39:49-24/04/19 NORMAL: first member EV1_ALIAS of sequence is present
+	18:39:49-24/04/19 SUCCESS creating sequence EV1_ALIAS EV2_ALIAS EV3_ALIAS EV4_ALIAS
+	pi@raspberrypi:~/piGardenSched $ 
+Per controllare il contenuto:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;20;14:00;1;active
+	EV2_ALIAS;20;EV1_ALIAS;;
+	EV3_ALIAS;20;EV2_ALIAS;;
+	EV4_ALIAS;20;EV3_ALIAS;;
+	pi@raspberrypi:~/piGardenSched $
+Se uso l'opzione add facendo riferimento ad una entry gia' esistente ottengo un errore:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh add EV1_ALIAS 20 14:00 1
+	ERROR: EV4_ALIAS is already present; use "add_time, change_time, change_freq or change_dur" option
+	18:40:06-24/04/19 ERROR adding new schedule for EV4_ALIAS
+	pi@raspberrypi:~/piGardenSched $
+Non e' quindi possibile aggiungere due volte la stessa entry. Se si vuole fare piu' schedulazioni e' possibile aggiungere un altro orario:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh add_time EV1_ALIAS 15:55
+	19:01:03-24/04/19 NORMAL: 14:55 added to EV1_ALIAS entry
+	pi@raspberrypi:~/piGardenSched $
+e conseguente verifica:	
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;15;16:00,14:55;1;inactive
+	EV2_ALIAS;15;EV1_ALIAS;;
+	EV3_ALIAS;15;EV2_ALIAS;;
+	EV4_ALIAS;15;EV3_ALIAS;;
+	pi@raspberrypi:~/piGardenSched $
+La schedulazione con piu' orari e' solo possibile se la frequenza giornalier e' a 1.
+Ad oggi non vi e' nessun controllo se le schedulazioni sulla stessa EV si sovrappongono: EV1 con schedulazione 15:55 e 16:00 con durata di 15 minuti.
+Non esiste opzione per rimuovere un orario da un schedulazione. O la modifico sostituendo tutte quelle presenti, oppure cancello l'intera entry:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_time EV1_ALIAS 16:00
+	00:06:49-29/04/19 NORMAL: change done
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;20;16:00;1;active
+	EV2_ALIAS;20;EV1_ALIAS;;
+	EV3_ALIAS;20;EV2_ALIAS;;
+	EV4_ALIAS;20;EV3_ALIAS;;
+	pi@raspberrypi:~/piGardenSched $
+Non e' possibile cambiare l'orario o la frequenza di un membro, che non sia il primo, di una sequenza:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_time  EV3_ALIAS 16:00
+	00:08:25-29/04/19 ERROR: cannot change scheduled time for a sequential irrigation - EV3_ALIAS will run after EV2_ALIAS
+	pi@raspberrypi:~/piGardenSched $
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_freq  EV3_ALIAS 3
+	00:09:04-29/04/19 ERROR: cannot change frequency for a sequential irrigation - EV3_ALIAS will run after EV2_ALIAS
+	pi@raspberrypi:~/piGardenSched $
+Mentre per la durata e' possibile:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_dur EV2_ALIAS 15
+	00:10:56-29/04/19 NORMAL: change done
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_dur EV4_ALIAS 25
+	00:11:04-29/04/19 NORMAL: change done
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;20;16:00;1;active
+	EV2_ALIAS;15;EV1_ALIAS;;
+	EV3_ALIAS;20;EV2_ALIAS;;
+	EV4_ALIAS;25;EV3_ALIAS;;
+	pi@raspberrypi:~/piGardenSched $
+E' altresi' possibile annullare la sequenza; le nuove entry verranno automaticamente schedulate per gli orari calcolati come se fossero in sequenza:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh noseq
+	00:12:18-29/04/19 NORMAL: change done
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;20;16:00;1;active
+	EV2_ALIAS;15;16:20;1;active
+	EV3_ALIAS;20;16:35;1;active
+	EV4_ALIAS;25;16:55;1;active
+	pi@raspberrypi:~/piGardenSched $
+Errore di esecuzione opzione seq con ordine non in sequenza:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh seq  EV1_ALIAS EV2_ALIAS EV4_ALIAS
+	ERROR: wrong sequence given EV1_ALIAS EV2_ALIAS EV4_ALIAS
+	        number are not contiguous or repeated (1 2 4 )
+	pi@raspberrypi:~/piGardenSched $
+mentre e' corretta:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh seq  EV2_ALIAS EV3_ALIAS EV4_ALIAS
+	00:14:25-29/04/19 NORMAL: first member EV2_ALIAS of sequence is present
+	00:14:25-29/04/19 SUCCESS creating sequence EV2_ALIAS EV3_ALIAS EV4_ALIAS
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;20;16:00;1;active
+	EV2_ALIAS;15;16:20;1;active
+	EV3_ALIAS;20;EV2_ALIAS;;
+	EV4_ALIAS;25;EV3_ALIAS;;
+	pi@raspberrypi:~/piGardenSched $
+e puo' essere ripristinata la sequenza originale senza dover rimuovere quella eventualmente parzialmente presente:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh seq  EV1_ALIAS EV2_ALIAS EV3_ALIAS EV4_ALIAS
+	00:15:51-29/04/19 NORMAL: first member EV1_ALIAS of sequence is present
+	00:15:51-29/04/19 SUCCESS creating sequence EV1_ALIAS EV2_ALIAS EV3_ALIAS EV4_ALIAS
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;20;16:00;1;active
+	EV2_ALIAS;15;EV1_ALIAS;;
+	EV3_ALIAS;20;EV2_ALIAS;;
+	EV4_ALIAS;25;EV3_ALIAS;;
+	pi@raspberrypi:~/piGardenSched $
+Questa volta essendo le entry della sequenza presenti, la durata viene mantenuta e non ereditata dalla prima EV1.
+Possiamo aggiungere una nuova EV:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh add EV5_ALIAS 20 18:00 1
+	00:19:07-29/04/19 SUCCESS adding new schedule for EV5_ALIAS
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;20;16:00;1;active
+	EV2_ALIAS;15;EV1_ALIAS;;
+	EV3_ALIAS;20;EV2_ALIAS;;
+	EV4_ALIAS;25;EV3_ALIAS;;
+	EV5_ALIAS;20;18:00;1;active
+	pi@raspberrypi:~/piGardenSched $
+Ma deve essere dichiarata in /etc/piGarden.conf . Ad esempio, avendo impostato in tale file di configurazione EV_TOTAL=6, non posso aggiungere EV7:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh add EV7_ALIAS 20 19:00 1
+	00:19:38-29/04/19 ERROR: EV7_ALIAS is NOT between range (EV_TOTAL = 6 )
+	00:19:38-29/04/19 ERROR: EV7_ALIAS is not a valid EV_ALIAS
+	pi@raspberrypi:~/piGardenSched $
+Cosi' come non sono permessi errori specificando l'EV:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh add EV6_ALIA 20 19:00 1
+	00:20:06-29/04/19 ERROR: EV6_ALIA format is NOT right "EV[0-9]_ALIAS or EV[0-9][0-9]_ALIAS"
+	00:20:06-29/04/19 ERROR: EV6_ALIA is not a valid EV_ALIAS
+	pi@raspberrypi:~/piGardenSched $
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh add EV6_ALIAS 20 19:00 1
+	00:20:34-29/04/19 SUCCESS adding new schedule for EV6_ALIAS
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;20;16:00;1;active
+	EV2_ALIAS;15;EV1_ALIAS;;
+	EV3_ALIAS;20;EV2_ALIAS;;
+	EV4_ALIAS;25;EV3_ALIAS;;
+	EV5_ALIAS;20;18:00;1;active
+	EV6_ALIAS;20;19:00;1;active
+	pi@raspberrypi:~/piGardenSched $
+Vengono fatti i controlli sugli ALIAS come abbiamo visto poco fa, sugli orari (23:61 non è permesso) e sulle durate e frequenze (numeri):
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_dur EV5_ALIAS 20A
+	ERROR: 20A is not a valid duration in minutes
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_dur EV5_ALIAS 20
+	18:41:27-24/04/19 NORMAL: change done
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_time EV5_ALIAS 15:65
+	ERROR: 15:65 is not a valid time
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_time EV5_ALIAS 24:65
+	ERROR: 24:65 is not a valid time
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_time EV5_ALIAS 23:59
+	18:41:46-24/04/19 NORMAL: change done
+	pi@raspberrypi:~/piGardenSched $
+E' possibile variare la frequenza per EV5:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_freq EV5_ALIAS 3
+	00:23:29-29/04/19 NORMAL: change done
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;20;16:00;1;active
+	EV2_ALIAS;15;EV1_ALIAS;;
+	EV3_ALIAS;20;EV2_ALIAS;;
+	EV4_ALIAS;25;EV3_ALIAS;;
+	EV5_ALIAS;20;18:00;3;active
+	EV6_ALIAS;20;19:00;1;active
+	pi@raspberrypi:~/piGardenSched $
+E' possibile cancellare l'entry EV6:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh del EV6_ALIAS
+	00:24:57-29/04/19 NORMAL: found EV6_ALIAS in line 6 - removed
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;20;16:00;1;active
+	EV2_ALIAS;15;EV1_ALIAS;;
+	EV3_ALIAS;20;EV2_ALIAS;;
+	EV4_ALIAS;25;EV3_ALIAS;;
+	EV5_ALIAS;20;18:00;3;active
+	pi@raspberrypi:~/piGardenSched $
+Ma non l'entry di una sequenza:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh del EV2_ALIAS
+	00:25:32-29/04/19 ERROR: found EV2_ALIAS in part of a concatenated irrigation
+	pi@raspberrypi:~/piGardenSched $
+A meno che non sia la prima:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh del EV1_ALIAS
+	00:25:51-29/04/19 NORMAL: found EV1_ALIAS in line 1 - removed
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV2_ALIAS;15;16:20;1;active
+	EV3_ALIAS;20;EV2_ALIAS;;
+	EV4_ALIAS;25;EV3_ALIAS;;
+	EV5_ALIAS;20;18:00;3;active
+	pi@raspberrypi:~/piGardenSched $
+in tal caso la nuova prima diventa la EV2 con lo stesso orario di partenza: EV1 h 16:00 + 20' di durata = 16:20
+E' possibile lasciare una schedulazione inattiva all'interno del file:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh disable EV2_ALIAS
+	00:32:28-29/04/19 NORMAL: change done
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV2_ALIAS;15;16:20;1;inactive
+	EV3_ALIAS;20;EV2_ALIAS;;
+	EV4_ALIAS;25;EV3_ALIAS;;
+	EV5_ALIAS;20;18:00;3;active
+	pi@raspberrypi:~/piGardenSched $
+Riattivabile successivamente:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh enable EV2_ALIAS
+	00:33:28-29/04/19 NORMAL: change done
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV2_ALIAS;15;16:20;1;active
+	EV3_ALIAS;20;EV2_ALIAS;;
+	EV4_ALIAS;25;EV3_ALIAS;;
+	EV5_ALIAS;20;18:00;3;active
+	pi@raspberrypi:~/piGardenSched $
+Ovviamente non e' possibile farlo per le irrigazioni sequenziali:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh disable EV3_ALIAS
+	00:33:35-29/04/19 ERROR: cannot enable EV3_ALIAS because it's part of a sequential irrigation
+	pi@raspberrypi:~/piGardenSched $
+
+GESTIONE IRRIGAZIONI
+--------------------
+come abbiamo anticipato prima, tutte gli stati delle schedulazioni e delle irrigazioni vengono registrate nella sottodirectory state.
+Lasciamo questa configurazione dello schedulatore attiva per qualche giorno e vediamo cosa otterremo:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;2;10:00;1;active
+	EV2_ALIAS;2;EV1_ALIAS;;
+	EV3_ALIAS;2;EV2_ALIAS;;
+	EV4_ALIAS;2;EV3_ALIAS;;
+	EV5_ALIAS;5;16:00;1;inactive
+	EV6_ALIAS;1;09:00,18:00;1;inactive
+	pi@raspberrypi:~/piGardenSched $
+Vedi dettagli nei log in riferimento al periodo 00:46 del 29/4 fino alle 16:30 del 29/4.
+Successivamente e' stata attivata la EV6:
+	pi@raspberrypi:~/piGardenSched/log $ ../piGardenSched.sh enable EV6_ALIAS
+	pi@raspberrypi:~/piGardenSched/log $ ../piGardenSched.sh show
+	EV1_ALIAS;2;10:00;1;active
+	EV2_ALIAS;2;EV1_ALIAS;;
+	EV3_ALIAS;2;EV2_ALIAS;;
+	EV4_ALIAS;2;EV3_ALIAS;;
+	EV5_ALIAS;5;16:00;1;inactive
+	EV6_ALIAS;1;09:00,18:00;1;active
+	pi@raspberrypi:~/piGardenSched/log $
+
+Questa l'output del comando con opzione history (dopo solo un'irrigazione , quella delle 10):
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh history
+	
+	NORMAL: irrigation for ZONA1_pratoSud is at 10:00 every 1 day(s) - ACTIVE
+	this is an ACTIVE concatenated irrigation: ZONA1_pratoSud ZONA2_pratoSudOvest ZONA3_pratoNordOvest ZONA4_pratoNord
+	history of irrigations:
+	Mon Apr 29 10:00:00 CEST 2019
+	pi@raspberrypi:~/piGardenSched $
+Questo l'output con l'opzione irrigation:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh irrigation
+
+	EV ZONA1_pratoSud history of effective irrigation
+	Mon Apr 29 10:00:02 CEST 2019 for 2 mins
+	
+	EV ZONA2_pratoSudOvest history of effective irrigation
+	Mon Apr 29 10:02:04 CEST 2019 for 2 mins
+	
+	EV ZONA3_pratoNordOvest history of effective irrigation
+	Mon Apr 29 10:04:06 CEST 2019 for 2 mins
+
+	EV ZONA4_pratoNord history of effective irrigation
+	Mon Apr 29 10:06:09 CEST 2019 for 2 mins
+	pi@raspberrypi:~/piGardenSched $
+L'opzione stat per verificare le irrigazioni schedulate presenti e future:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh stat
+	
+	NORMAL: irrigation for ZONA1_pratoSud is at 10:00 every 1 day(s) - ACTIVE
+        	last irrigation was     on Mon Apr 29 10:00:00 CEST 2019
+	        next irrigation will be on Tue Apr 30 10:00:00 CEST 2019
+	this is an ACTIVE concatenated irrigation: ZONA1_pratoSud ZONA2_pratoSudOvest ZONA3_pratoNordOvest ZONA4_pratoNord
+
+	WARNING: irrigation for Fragole is at 16:00 every 1 day(s) - INACTIVE
+	        no previous irrigation
+        	next irrigation will be today/tomorrow at 16:00
+
+	NORMAL: irrigation for Aiuola is at 09:00 every 1 day(s) - ACTIVE
+        	no previous irrigation
+	        next irrigation will be today/tomorrow at 09:00
+
+	NORMAL: irrigation for Aiuola is at 18:00 every 1 day(s) - ACTIVE
+        	no previous irrigation
+	        next irrigation will be today/tomorrow at 18:00
+	pi@raspberrypi:~/piGardenSched $
+
+E' possibile effettuare un reset degli stati registrati con il seguente comando:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh reset
+	00:37:08-29/04/19 NORMAL: resetting irrigation status for all EVs
+	tar: Removing leading `/' from member names
+	/home/pi/piGardenSched/state/
+	/home/pi/piGardenSched/state/ZONA1_pratoSud-irrigationhistory
+	/home/pi/piGardenSched/state/ZONA3_pratoNordOvest-irrigationhistory
+	/home/pi/piGardenSched/state/ZONA1_pratoSud-10:00.lastrun
+	/home/pi/piGardenSched/state/ZONA1_pratoSud-10:00.history
+	/home/pi/piGardenSched/state/ZONA4_pratoNord-irrigationhistory
+	/home/pi/piGardenSched/state/ZONA2_pratoSudOvest-irrigationhistory
+	pi@raspberrypi:~/piGardenSched $ ll state
+	total 0
+	pi@raspberrypi:~/piGardenSched $
+E automaticamente viene fatto un backup del contenuto della directory sotto tmp
+	pi@raspberrypi:~/piGardenSched $ ll tmp
+	total 28
+	-rw-r--r-- 1 pi pi  1058 Apr 28 15:20 crontab
+	-rw-r--r-- 1 pi pi   955 Apr 29 00:28 crontab.output
+	-rw-r--r-- 1 pi pi     0 Apr 29 00:37 piGarden.sched
+	-rw-r--r-- 1 pi pi   157 Apr 29 00:36 piGarden.sched_2
+	-rw-r--r-- 1 pi pi   551 Apr 29 00:36 piGarden.sched_3
+	-rw-r--r-- 1 pi pi 10240 Apr 29 00:37 state_32327.tar
+	pi@raspberrypi:~/piGardenSched $ tar tvf tmp/state_32327.tar
+	drwxr-xr-x pi/pi             0 2019-04-28 00:22 home/pi/piGardenSched/state/
+	-rw-r--r-- pi/pi            52 2019-04-28 00:45 home/pi/piGardenSched/state/ZONA1_pratoSud-irrigationhistory
+	-rw-r--r-- pi/pi            52 2019-04-28 00:47 home/pi/piGardenSched/state/ZONA3_pratoNordOvest-irrigationhistory
+	-rw-r--r-- pi/pi            11 2019-04-28 00:33 home/pi/piGardenSched/state/ZONA1_pratoSud-10:00.lastrun
+	-rw-r--r-- pi/pi            22 2019-04-28 00:33 home/pi/piGardenSched/state/ZONA1_pratoSud-10:00.history
+	-rw-r--r-- pi/pi            52 2019-04-28 00:48 home/pi/piGardenSched/state/ZONA4_pratoNord-irrigationhistory
+	-rw-r--r-- pi/pi            52 2019-04-28 00:46 home/pi/piGardenSched/state/ZONA2_pratoSudOvest-irrigationhistory
+	pi@raspberrypi:~/piGardenSched $
+
+
+IL LOG DELLO SCHEDULATORE - piGardenSched.log
+---------------------------------------------
+Con l'opzione verbose=yes di /etc/piGardenSched.con vengono attivati ulteriori messaggi (tipicamente con NORMAL come prefisso), come il seguente ogni minuto in assenza di schedulazioni:
+	01:14:01-29/04/19 NORMAL: no irrigation run at 01:14
+La schedulazione di EV5 e' disattivata pertanto alle 16:00 il messaggio riportato nel log e':
+	09:00:01-29/04/19 NORMAL: piGarden drv_rainsensorqty service active - integration with piGardenSched is available
+	Mon Apr 29 09:00:00 CEST 2019 - START IRRIGATION Aiuola after 1 days
+	WARNING: single irrigation for Aiuola EV ( scheduled EV is Aiuola ) is INACTIVE - irrigation skipped
+Cosi' come alle 10:
+	10:00:01-29/04/19 NORMAL: piGarden drv_rainsensorqty service active - integration with piGardenSched is available
+	Mon Apr 29 10:00:00 CEST 2019 - START IRRIGATION ZONA1_pratoSud after 1 days
+	NORMAL: multi irrigation for  ZONA1_pratoSud ZONA2_pratoSudOvest ZONA3_pratoNordOvest ZONA4_pratoNord EV ( scheduled EV is ZONA1_pratoSud ) is running
+	EV ZONA1_pratoSud lastrun updated
+	10:00:01-29/04/19 running nohup command "/home/pi/piGardenSched/include/irrigating.sh  ZONA1_pratoSud:2 ZONA2_pratoSudOvest:2 ZONA3_pratoNordOvest:2 ZONA4_pratoNord:2
+        check logfile /home/pi/piGardenSched/log/ZONA1_pratoSud-10:00.log"
+
+IL LOG DELL'IRRIGAZIONE (es. ZONA1_pratoSud-10:00.log - tipo "MULTI IRRIGATION"):
+---------------------------------------------------------------------------------
+Con l'opzione verbose=yes di /etc/piGardenSched.conf vengono attivati ulteriori messaggi con prefisso NORMAL.
+Vediamo il contenuto di tale log per la prima EV:
+	called irrigating.sh ZONA1_pratoSud:2 ZONA2_pratoSudOvest:2 ZONA3_pratoNordOvest:2 ZONA4_pratoNord:2
+	----- STARTING MULTI IRRIGATION - 4 EVs CONCATENATED -----
+	10:00:02-29/04/19 NORMAL: piGarden drv_rainsensorqty service active - integration with piGardenSched is available
+	10:00:02-29/04/19 NORMAL: $RAIN_GPIO is "drv:rainsensorqty" and "$autostoprain" yes - raincheck
+	10:00:02-29/04/19 NORMAL: ${EVNORAINQTY[1]} is 0 (or null) - raincheck QTY for ZONA1_pratoSud is active
+	10:00:02-29/04/19 NORMAL: ${EVNORAINCLASSIC[1]} is 1 - classic raincheck for ZONA1_pratoSud is disabled
+	10:00:02-29/04/19 NORMAL: starting irrigation EV ZONA1_pratoSud
+	DEBUG flag "/home/pi/piGardenSched/include/DEBUG" found - piGarden.sh open ZONA1_pratoSud not executed
+	10:00:02-29/04/19 NORMAL: piGarden drv_rainsensorqty service active - integration with piGardenSched is available
+	waiting 2 minutes 10:00:02-29/04/19 NORMAL: $RAIN_GPIO is "drv:rainsensorqty" and "$autostoprain" yes - raincheck
+	10:00:02-29/04/19 NORMAL: ${EVNORAINQTY[1]} is 0 (or null) - raincheck QTY for ZONA1_pratoSud is active
+	10:00:02-29/04/19 NORMAL: ${EVNORAINCLASSIC[1]} is 1 - classic raincheck for ZONA1_pratoSud is disabled
+	.10:01:02-29/04/19 NORMAL: $RAIN_GPIO is "drv:rainsensorqty" and "$autostoprain" yes - raincheck
+	10:01:02-29/04/19 NORMAL: ${EVNORAINQTY[1]} is 0 (or null) - raincheck QTY for ZONA1_pratoSud is active
+	10:01:02-29/04/19 NORMAL: ${EVNORAINCLASSIC[1]} is 1 - classic raincheck for ZONA1_pratoSud is disabled
+	.
+	DEBUG - piGarden.sh close ZONA1_pratoSud not executed
+	10:02:02-29/04/19 NORMAL: end irrigation EV ZONA1_pratoSud after 2 mins
+	[...] rimosse alcune linee
+	DEBUG flag "/home/pi/piGardenSched/include/DEBUG" found - piGarden.sh close ZONA4_pratoNord not executed
+	10:08:09-29/04/19 NORMAL: end irrigation EV ZONA4_pratoNord after 2 mins
+	----- FINISHED MULTI IRRIGATION -----
+
+La prima riga riporta gli argomenti con cui e' stato lanciato lo script: un argomento per EV con il nome:durata.
+Viene specificato che trattasi di MULTI IRRIGATION
+Tutti i messaggi NORMAL sono visibili per via dell'opzione verbose attiva. Vedremo che se disattivata il log sara' piu' conciso.
+le prime 4 righe, cioe' le:
+	10:00:02-29/04/19 NORMAL: piGarden drv_rainsensorqty service active - integration with piGardenSched is available
+	10:00:02-29/04/19 NORMAL: $RAIN_GPIO is "drv:rainsensorqty" and "$autostoprain" yes - raincheck
+	10:00:02-29/04/19 NORMAL: ${EVNORAINQTY[1]} is 0 (or null) - raincheck QTY for ZONA1_pratoSud is active
+	10:00:02-29/04/19 NORMAL: ${EVNORAINCLASSIC[1]} is 1 - classic raincheck for ZONA1_pratoSud is disabled
+Sono verifiche per l'opzione autostoprain attiva per via dell'integrazione con drv_rainsensorqty . Lo verifica della presenza della pioggia viene effettuata prima dell'apertura dell'EV e durante il periodo di attivazione - cioe' il parametro tempo di apertura/durata. Motivo per il quale sono presenti due blocchi di tali verifiche.
+Ogni . (punto) riportato e' un minuto passato. Vedremo la maggior leggibilita' del log con verbose=no
+La presenza del file vuoto /home/pi/piGardenSched/include/DEBUG evita l'apertura/chiusura dell'EV al fine dei test dello schedulatore.
+Mettiamo quindi verbose=no in /etc/piGardenSched.conf editando il file.
+Di seguito il log dell'irrigazione dell'EV6, ovvero Aiuola:
+called irrigating.sh Aiuola:1
+	----- STARTING SINGLE IRRIGATION -----
+	18:00:01-29/04/19 NORMAL: starting irrigation EV Aiuola
+	DEBUG flag "/home/pi/piGardenSched/include/DEBUG" found - piGarden.sh open Aiuola not executed
+	waiting 1 minutes .
+	DEBUG flag "/home/pi/piGardenSched/include/DEBUG" found - piGarden.sh close Aiuola not executed
+	18:01:01-29/04/19 NORMAL: end irrigation EV Aiuola after 1 mins
+	----- FINISHED SINGLE IRRIGATION -----
+
+INTEGRAZIONE CON DRV_RAINSENSORQTY
+Al fine di dimostrare il funzionamento dell'integrazione con rainsensorqty, ho predisposto la seguente irrigazione alle 22:30
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;2;10:00;1;active
+	EV2_ALIAS;2;EV1_ALIAS;;
+	EV3_ALIAS;2;EV2_ALIAS;;
+	EV4_ALIAS;2;EV3_ALIAS;;
+	EV5_ALIAS;5;16:00;1;inactive
+	EV6_ALIAS;1;09:00,18:00;1;active
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh enable EV5_ALIAS
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_time EV5_ALIAS 22:30
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_dur EV5_ALIAS 10
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;2;10:00;1;active
+	EV2_ALIAS;2;EV1_ALIAS;;
+	EV3_ALIAS;2;EV2_ALIAS;;
+	EV4_ALIAS;2;EV3_ALIAS;;
+	EV5_ALIAS;10;22:30;1;active
+	EV6_ALIAS;1;09:00,18:00;1;active
+	pi@raspberrypi:~/piGardenSched $
+Questa la previsione di irrigazione:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh stat
+
+	NORMAL: irrigation for ZONA1_pratoSud is at 10:00 every 1 day(s) - ACTIVE
+	        last irrigation was     on Mon Apr 29 10:00:00 CEST 2019
+	        next irrigation will be on Tue Apr 30 10:00:00 CEST 2019
+	this is an ACTIVE concatenated irrigation: ZONA1_pratoSud ZONA2_pratoSudOvest ZONA3_pratoNordOvest ZONA4_pratoNord
+
+	NORMAL: irrigation for Fragole is at 22:30 every 1 day(s) - ACTIVE
+	        no previous irrigation
+	        next irrigation will be today/tomorrow at 22:30
+
+	NORMAL: irrigation for Aiuola is at 09:00 every 1 day(s) - ACTIVE
+	        no previous irrigation
+        	next irrigation will be today/tomorrow at 09:00
+
+	NORMAL: irrigation for Aiuola is at 18:00 every 1 day(s) - ACTIVE
+        	last irrigation was     on Mon Apr 29 18:00:00 CEST 2019
+	        next irrigation will be on Tue Apr 30 18:00:00 CEST 2019
+	pi@raspberrypi:~/piGardenSched $
+
+Ho impostato la durata di 10 minuti cosi' possiamo simulare la pioggia in questo intervallo di tempo. Testeremo il comportamento controllato dalla variabile
+autostoprain impostata a yes
+	pi@raspberrypi:~/piGardenSched $ ll -rt log
+	total 76
+	-rw-r--r-- 1 pi pi  5934 Apr 29 10:08 ZONA1_pratoSud-10:00.log
+	-rw-r--r-- 1 pi pi   389 Apr 29 18:01 Aiuola-18:00.log
+	-rw-r--r-- 1 pi pi   350 Apr 29 22:30 piGardenSched.log
+	-rw-r--r-- 1 pi pi   245 Apr 29 22:32 Fragole-22:30.log
+	pi@raspberrypi:~/piGardenSched $ tail -f log/Fragole-22\:30.log
+	called irrigating.sh Fragole:10
+	----- STARTING SINGLE IRRIGATION -----
+	22:30:01-29/04/19 NORMAL: starting irrigation EV Fragole
+	DEBUG flag "/home/pi/piGardenSched/include/DEBUG" found - piGarden.sh open Fragole not executed
+	waiting 10 minutes ...
+Simuliamo la pioggia popolando a mano il file /home/pi/piGarden/state/rainsensorqty_lastrain
+Il tempo di reazione e' entro un minuto, in quanto il loop controllato da raincheck-waitloop.sh verifica lo stato della pioggia ogni minuto.
+Ecco il log:
+	called irrigating.sh Fragole:10
+	----- STARTING SINGLE IRRIGATION -----
+	22:30:01-29/04/19 NORMAL: starting irrigation EV Fragole
+	DEBUG flag "/home/pi/piGardenSched/include/DEBUG" found - piGarden.sh open Fragole not executed
+	waiting 10 minutes ......
+	RAINED on Mon Apr 29 22:35:22 CEST 2019 for 7.26 mm
+	DEBUG flag "/home/pi/piGardenSched/include/DEBUG" found - piGarden.sh close Fragole not executed
+	22:36:02-29/04/19 NORMAL: end irrigation EV Fragole after 6 mins
+	----- FINISHED SINGLE IRRIGATION -----
+Se verifichiamo quanto ha irrigato la EV5:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh irrigation
+
+	EV Aiuola history of effective irrigation
+	Mon Apr 29 18:00:01 CEST 2019 for 1 mins
+
+	EV Fragole history of effective irrigation
+	Mon Apr 29 22:30:01 CEST 2019 for 6 mins
+
+	EV ZONA1_pratoSud history of effective irrigation
+	Mon Apr 29 10:00:02 CEST 2019 for 2 mins
+
+	EV ZONA2_pratoSudOvest history of effective irrigation
+	Mon Apr 29 10:02:04 CEST 2019 for 2 mins
+
+	EV ZONA3_pratoNordOvest history of effective irrigation
+	Mon Apr 29 10:04:06 CEST 2019 for 2 mins
+
+	EV ZONA4_pratoNord history of effective irrigation
+	Mon Apr 29 10:06:09 CEST 2019 for 2 mins
+	pi@raspberrypi:~/piGardenSched $
+Vediamo che la EV Fragole ha irrigato alle 22:30:01 per 6 minuti
+
+Attiviamo anche la EV5 alle 22:45 cosi' vediamo come entra in gioco il comportamento gestito dalla variabile autodelayrain=yes
+	pi@raspberrypi:~/piGardenSched $ cat log/piGardenSched.log
+	[...] rimosse linee
+	EV Aiuola would have next irrigation on Mon Apr 29 22:45:00 CEST 2019
+	RAINED on Mon Apr 29 22:35:22 CEST 2019 for 7.26 mm
+	EV Aiuola irrigation delayed 1 day(s)
+	EV Aiuola next irrigation will be on Tue Apr 30 22:45:00 CEST 2019
+	pi@raspberrypi:~/piGardenSched $
+
+FUNZIONI SPECIALI
+-----------------
+L'eventuale creazione del file vuoto (touch DEBUG) nella directory /home/pi/piGardenSched/include (file esteso quindi /home/pi/piGardenSched/include/DEBUG) che impedisce l'effettiva esecuzione dell'apertura chiusura delle valvole. Modalità utile se si vuole testare il funzionamento del nuovo schedulatore prima di metterlo in produzione:
+	-rw-r--r-- 1 pi pi     0 Apr 27 23:34 DEBUG

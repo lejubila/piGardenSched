@@ -3,10 +3,10 @@
 # pigarden sched
 # main script "piGardenSched.sh"
 # Author: androtto
-# VERSION=0.3.0
+# VERSION=0.3.1c
 VERSION=0
 SUB_VERSION=3
-RELEASE_VERSION=1
+RELEASE_VERSION=1c
 #
 
 ##### MAIN

@@ -2,7 +2,7 @@
 # piGardenSched
 # "functions.include.sh"
 # Author: androtto
-# VERSION=0.3.0
+# VERSION=0.3.1
 #
 
 d() # short date & time
@@ -26,6 +26,14 @@ $NAME_SCRIPT show|sched
 	shows sched config file without comments
 $NAME_SCRIPT stat|status
 	gets status of last scheduled irrigation
+$NAME_SCRIPT reset
+	resetting status of last irrigations
+$NAME_SCRIPT add EV?_ALIAS duration time frequency
+	add schedule to $PIGARDENSCHED schedule file 
+	example $NAME_SCRIPT add EV5_ALIAS 10 10:30 1
+$NAME_SCRIPT del EV?_ALIAS
+	remove EV?_ALIAS from schedule file $PIGARDENSCHED
+	example $NAME_SCRIPT del EV5_ALIAS
 $NAME_SCRIPT change_dur EV?_ALIAS minutes
 	changes duration (only first occurance)
 	example $NAME_SCRIPT change_dur EV5_ALIAS 10
@@ -35,22 +43,17 @@ $NAME_SCRIPT change_freq EV?_ALIAS days
 $NAME_SCRIPT change_time EV?_ALIAS time
 	changes schedule (removed if more than one)
 	example $NAME_SCRIPT change_time EV5_ALIAS 10:30 
-$NAME_SCRIPT reset
-	resetting status of last irrigations
-$NAME_SCRIPT add EV?_ALIAS duration time frequency
-	add schedule to $PIGARDENSCHED schedule file 
-	example $NAME_SCRIPT add EV5_ALIAS 10 10:30 1
 $NAME_SCRIPT add_time EV?_ALIAS time (frequency must be 1)
 	add new schedule time to $PIGARDENSCHED schedule file
-	example $NAME_SCRIPT addtime EV5_ALIAS 13:50
+	example $NAME_SCRIPT add_time EV5_ALIAS 13:50
+$NAME_SCRIPT del_time EV?_ALIAS time (frequency must be 1)
+	delete schedule time from $PIGARDENSCHED schedule file
+	example $NAME_SCRIPT del_time EV5_ALIAS 13:50
 $NAME_SCRIPT seq EV1_ALIAS EV2_ALIAS
         add scheduled irrigation as per indicated
 	example $NAME_SCRIPT seq EV1_ALIAS EV2_ALIAS EV3_ALIAS EV4_ALIAS
 $NAME_SCRIPT noseq
         convert sequential irrigation in scheduled irrigation
-$NAME_SCRIPT del EV?_ALIAS
-	remove EV?_ALIAS from schedule file $PIGARDENSCHED
-	example $NAME_SCRIPT del EV5_ALIAS
 $NAME_SCRIPT enable EV?_ALIAS
 	enable EV?_ALIAS for scheduling in file $PIGARDENSCHED
 	example $NAME_SCRIPT enable EV5_ALIAS
@@ -427,32 +430,40 @@ remove_time()
 	oldtimesched=$2
 	local found=false
 
-	err_msg="ERROR: no $1 found"
+	err_msgA="ERROR: no $1 entry found"
+	err_msgB="ERROR: no $2 found in $1 entry"
+	foundA=false
+	foundB=false
 
 	(( numline=1 ))
 	while (( numline <= maxline ))
 	do
 		if [[ ${EVALIAS[$numline]} == $evalias ]] ; then
-			found=true
+			foundA=true
 			newtimesched=""
 			for time_sched in ${TIME_SCHED[$numline]//,/ }
 			do
 				if [[ $time_sched = $oldtimesched ]] ; then
-					: # nothing
+					foundB=true
 				else
-					newtimesched="$newtimesched $time_sched"
+					newtimesched="$newtimesched,$time_sched"
 				fi
 			done
-			newtimesched=${newtimesched/ /} # rimuovo il primo spazio
-			newtimesched=${newtimesched// /,} # sostituisco gli spazi con le virgole
-			echo "${EVALIAS[$numline]};${LONG[$numline]};$newtimesched;${DAYFREQ[$numline]};${ACTIVE[$numline]}"
+			echo "${EVALIAS[$numline]};${LONG[$numline]};${newtimesched/,/};${DAYFREQ[$numline]};${ACTIVE[$numline]}"
 		else
 			echo "${EVALIAS[$numline]};${LONG[$numline]};${TIME_SCHED[$numline]};${DAYFREQ[$numline]};${ACTIVE[$numline]}"
 		fi
 		
 		(( numline+=1 ))
 	done > $PIGARDENSCHED_TMP
-	[[ $found = "false" ]] && return 1
+	if [[ $foundA = false ]] ; then
+		err_msg=$err_msgA
+		return 1
+	fi
+	if [[ $foundB = false ]] ; then
+		err_msg=$err_msgB
+		return 1
+	fi
 	update_cfgfile
 }
 
@@ -569,19 +580,20 @@ remove()
 			fi
 		fi
 		if [[ ${TIME_SCHED[$numline]} == $evaliasprev ]] ; then
-#			if [[ $timeschedprev == EV* ]] ; then
-#				echo "${EVALIAS[$numline]};${LONG[$numline]};$timeschedprev;;"
-#			else
-				if ! check_timeformat $timeschedprev ; then
-					msg="ERROR: $timeschedprev is not a valid time"
+			newtimesched=""
+			for time_sched in ${timeschedprev//,/ }
+                	do
+				if ! check_timeformat $time_sched ; then
+					msg="ERROR: $time_sched is not a valid time"
 					return 1
 				fi
-				hour=$( echo $timeschedprev | cut -f1 -d:)
-				min=$( echo $timeschedprev | cut -f2 -d:)
+				hour=$( echo $time_sched | cut -f1 -d:)
+				min=$( echo $time_sched | cut -f2 -d:)
 				(( secs = 10#$hour*3600+10#$min*60+10#$longprev*60 ))
-				timesched="$(date -u --date="@$secs" '+%R')"
-				echo "${EVALIAS[$numline]};${LONG[$numline]};$timesched;$dayfreqprev;$activeprev"
-#			fi
+				newtimesched="$newtimesched,$(date -u --date="@$secs" '+%R')"
+			done
+			
+			echo "${EVALIAS[$numline]};${LONG[$numline]};${newtimesched/,/};$dayfreqprev;$activeprev"
 			(( numline+=1 ))
 			continue
 		fi

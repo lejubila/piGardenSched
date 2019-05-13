@@ -52,9 +52,17 @@ do
 		# NO RAIN
 		start_secs=$( date '+%s' )
 		echo "$(d) NORMAL: starting irrigation EV $evlabel"
-		[[ ! -f $DIR_SCRIPT/DEBUG ]] && $PIGARDEN_HOME/piGarden.sh open $evlabel || echo "DEBUG flag \"$DIR_SCRIPT/DEBUG\" found - piGarden.sh open $evlabel not executed"
+		if [[ ! -f $DIR_SCRIPT/DEBUG ]] ; then
+			 $PIGARDEN_HOME/piGarden.sh open $evlabel 
+		else
+			 echo "DEBUG flag \"$DIR_SCRIPT/DEBUG\" found - piGarden.sh open $evlabel not executed"
+		fi
 		$DIR_SCRIPT/raincheck-waitloop.sh $evlabel wait $duration 
-		[[ ! -f $DIR_SCRIPT/DEBUG ]] && $PIGARDEN_HOME/piGarden.sh close $evlabel || echo "DEBUG flag \"$DIR_SCRIPT/DEBUG\" found - piGarden.sh close $evlabel not executed"
+		if [[ ! -f $DIR_SCRIPT/DEBUG ]] ; then
+			 $PIGARDEN_HOME/piGarden.sh close $evlabel 
+		else
+			 echo "DEBUG flag \"$DIR_SCRIPT/DEBUG\" found - piGarden.sh close $evlabel not executed"
+		fi
 		end_secs=$( date '+%s' )
 		(( irrigation_mins=(end_secs-start_secs)/60 ))
 		echo "$(d) NORMAL: end irrigation EV $evlabel after $irrigation_mins mins"

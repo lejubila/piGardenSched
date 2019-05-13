@@ -179,7 +179,16 @@ e conseguente verifica:
 	pi@raspberrypi:~/piGardenSched $
 La schedulazione con piu' orari e' solo possibile se la frequenza giornalier e' a 1.
 Ad oggi non vi e' nessun controllo se le schedulazioni sulla stessa EV si sovrappongono: EV1 con schedulazione 15:55 e 16:00 con durata di 15 minuti.
-Non esiste opzione per rimuovere un orario da un schedulazione. O la modifico sostituendo tutte quelle presenti, oppure cancello l'intera entry:
+
+E' possibile eliminare un orario dalla schedulazione:
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh del_time EV1_ALIAS 16:00
+	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show
+	EV1_ALIAS;15;14:55;1;inactive
+	EV2_ALIAS;15;EV1_ALIAS;;
+	EV3_ALIAS;15;EV2_ALIAS;;
+	EV4_ALIAS;15;EV3_ALIAS;;
+	pi@raspberrypi:~/piGardenSched $
+Oppure posso sostituire tutte quelle presenti (anche se solo una) con una nuova:
 	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_time EV1_ALIAS 16:00
 	00:06:49-29/04/19 NORMAL: change done
 	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh show

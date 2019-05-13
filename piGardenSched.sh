@@ -146,7 +146,7 @@ case $1 in
 		fi
 		;;
 	add_time)	shift
-		[[ $# -ne 2 ]] && { echo "ERROR: 2 parameters needed after change_time option" ; exit 1 ; }
+		[[ $# -ne 2 ]] && { echo "ERROR: 2 parameters needed after add_time option" ; exit 1 ; }
 		check_evalias $1 || { echo "ERROR: $1 is not a valid EV_ALIAS" ; exit 1 ; }
 		check_timeformat $2 || { echo "ERROR: $2 is not a valid time" ; exit 1 ; }
 		if add_time $1 $2 ; then

@@ -3,11 +3,11 @@
 # pigarden sched
 # main script "piGardenSched.sh"
 # Author: androtto
-# VERSION=0.3.1c
+# VERSION=0.3.1d
 VERSION=0
 SUB_VERSION=3
-RELEASE_VERSION=1c
-#
+RELEASE_VERSION=1d
+# 2019/08/13: irrigation option has improved
 
 ##### MAIN
 now=$(date +%s )
@@ -169,7 +169,18 @@ case $1 in
 		fi
 		;;
 	history) history ;;
-	irrigation) irrigation_history ;;
+	irrigation) 
+	        if [[ -n $2 ]] ; then
+			if [[ $2 =~ ^[0-9]$ || $2 =~ ^[0-9][0-9]$ ]] ; then
+				irrigation_history $2 
+			else
+				echo "ERROR: irrigation history parameter must be an integer with 1 or 2 digit"
+				exit 1
+			fi
+		else
+				irrigation_history 
+        	fi
+		;;
 	enable) shift
 		[[ $# -ne 1 ]] && { echo "ERROR: 1 parameter needed after enable option" ; exit 1 ; }
 		check_evalias $1 || { echo "ERROR: $1 is not a valid EV_ALIAS" ; exit 1 ; }

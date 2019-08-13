@@ -2,7 +2,10 @@
 # piGardenSched
 # "functions.include.sh"
 # Author: androtto
-# VERSION=0.3.1
+# VERSION=0.3.1f
+# 2019/08/13: irrigation history improved - not it manages last events
+# 2019/07/25: log reading is improved
+# 2019/07/15: help fixed
 #
 
 d() # short date & time
@@ -50,10 +53,10 @@ $NAME_SCRIPT del_time EV?_ALIAS time (frequency must be 1)
 	delete schedule time from $PIGARDENSCHED schedule file
 	example $NAME_SCRIPT del_time EV5_ALIAS 13:50
 $NAME_SCRIPT seq EV1_ALIAS EV2_ALIAS
-        add scheduled irrigation as per indicated
+        create sequential irrigation as per indicated
 	example $NAME_SCRIPT seq EV1_ALIAS EV2_ALIAS EV3_ALIAS EV4_ALIAS
 $NAME_SCRIPT noseq
-        convert sequential irrigation in scheduled irrigation
+        convert sequential irrigation in scheduled irrigation (each EV with its scheduling)
 $NAME_SCRIPT enable EV?_ALIAS
 	enable EV?_ALIAS for scheduling in file $PIGARDENSCHED
 	example $NAME_SCRIPT enable EV5_ALIAS
@@ -62,8 +65,9 @@ $NAME_SCRIPT disable EV?_ALIAS
 	example $NAME_SCRIPT disable EV5_ALIAS
 $NAME_SCRIPT history
 	showing history for scheduled irrigations
-$NAME_SCRIPT irrigation
-	gets status of effective irrigation per each EV
+$NAME_SCRIPT irrigation [# events]
+	gets status of effective irrigations per each EV
+		number events is optional and if present it lists irrigations just for those numbers of events
 $NAME_SCRIPT help|-h
 	print [this] help
 $NAME_SCRIPT 
@@ -274,15 +278,15 @@ irrigazione()
 	fi
 
 	if [[ ${ACTIVE[$numline]} = inactive ]] ; then
-		echo "WARNING: $type irrigation for $evlist_label EV ( scheduled EV is ${EVLABEL[$numline]} ) is INACTIVE - irrigation skipped"
+		echo "$(date) - WARNING: $type irrigation for $evlist_label EV ( scheduled EV is ${EVLABEL[$numline]} ) is INACTIVE - irrigation skipped"
 		return 1
 	else
-		echo "NORMAL: $type irrigation for $evlist_label EV ( scheduled EV is ${EVLABEL[$numline]} ) is running"
+		echo "$(date) - $type irrigation for $evlist_label EV ( scheduled EV is ${EVLABEL[$numline]} ) is running"
 
-		echo "EV ${EVLABEL[$numline]} lastrun updated"
+		echo "$(date) - EV ${EVLABEL[$numline]} lastrun updated with \"${date_now}\" timestamp"
 		statupdate_sched
 	
-		en_echo "running nohup command \"$irrigating $evlist \n\tcheck logfile $logfile\" "
+		echo -e "$(date) - running nohup command\n\t\t\"$irrigating $evlist\"\n\t\tcheck logfile $logfile "
 		nohup $irrigating $evlist >> $logfile 2>&1 &
 		irrigated="yes"
 	fi
@@ -298,6 +302,8 @@ do
    for time_sched in ${TIME_SCHED[$numline]//,/ }
    do
 		if [[ "$time_sched" == "$time_now" ]] ; then
+			echo # per rendere leggibile il log file
+
 			statfile=$STATDIR/${EVLABEL[$numline]}-${time_sched}.lastrun
 			histfile=$STATDIR/${EVLABEL[$numline]}-${time_sched}.history
 #			echo DEBUG "$date_now - ${EVALIAS[$numline]} presente schedulazione - verifico se compatibile con frequenza"
@@ -307,7 +313,7 @@ do
 				lst_irrgtn="$(<$statfile)"
 				(( now == lst_irrgtn )) && { echo "ERROR in DEBUG: now = lst_irrgtn"; exit 1; }
 				(( chk_irrgtn=lst_irrgtn+dayfreq*24*60*60 ))
-				echo "EV ${EVLABEL[$numline]} last irrigation was on $(date --date="@$lst_irrgtn") "
+				echo "$(date) - EV ${EVLABEL[$numline]} last irrigation was on \"$(date --date="@$lst_irrgtn")\" "
 			else
 				# non c'e' il file con l'ultima erogazione
 				(( lst_irrgtn = now-dayfreq*24*60*60 ))
@@ -315,7 +321,7 @@ do
 			fi
 
 			if (( now < chk_irrgtn )) ; then 
-				echo "EV ${EVLABEL[$numline]} next irrigation will be on $(date --date "@$chk_irrgtn")"
+				echo "$(date) - EV ${EVLABEL[$numline]} next irrigation will be on \"$(date --date "@$chk_irrgtn")\" "
 				break
 			fi
 
@@ -331,13 +337,13 @@ do
 			# after # as set in sched config file
 			if (( now > chk_irrgtn )) ; then 
 				(( days_late = (now-chk_irrgtn)/86400 ))
-				echo "$date_now - START IRRIGATION ${EVLABEL[$numline]} after $days_late days late (would be on $(date --date "@$chk_irrgtn")"
+				echo "$(date) - START IRRIGATION ${EVLABEL[$numline]} after $days_late days late (would be on $(date --date "@$chk_irrgtn")"
 				irrigazione
 			elif (( now == chk_irrgtn )) ; then 
-				echo "$date_now - START IRRIGATION ${EVLABEL[$numline]} after $(( (now-lst_irrgtn)/86400 )) days"
+				echo "$(date) - START IRRIGATION ${EVLABEL[$numline]} after $(( (now-lst_irrgtn)/86400 )) days"
 				irrigazione
 			elif (( now < chk_irrgtn )) ; then 
-				echo "EV ${EVLABEL[$numline]} next irrigation will be on $(date --date "@$chk_irrgtn")"
+				echo "$(date) - EV ${EVLABEL[$numline]} next irrigation will be on $(date --date "@$chk_irrgtn")"
 			fi
 		fi
 #	echo DEBUG ${EVALIAS[$numline]} ${LONG[$numline]} ${TIME_SCHED[$numline]} ${DAYFREQ[$numline]}
@@ -909,24 +915,33 @@ history()
 	done
 }
 
+show_irrigations()
+{
+# it works passing standard input
+	cat - | while read line
+	do
+		set -- ${line//:/ }
+		start=$1
+		mins=$2
+		echo "$(date --date "@$start") for $mins mins"
+	done 
+}
+
 irrigation_history()
 {
+	# if $1 passes, that's number of events
+	number_of_events=$1
 	#set -x
 	cd $STATDIR
-
-	#called statupdate_irrigation $evlabel $start_secs $irrigation_mins
-	#echo $2:$3 >> $STATDIR/${1}-irrigationhistory
 
 	for histfile in *-irrigationhistory 
 	do
 		evlabel=${histfile//-*/}
-		echo -e "\nEV $evlabel history of effective irrigation"
-		while read line
-		do
-			set -- ${line//:/ }
-			start=$1
-			mins=$2
-			echo "$(date --date "@$start") for $mins mins"
-		done < $histfile
+		echo -e "\nEV $evlabel history of effective irrigations"
+		if [[ -z $number_of_events ]] ; then
+			cat $histfile | show_irrigations
+		else
+			tail -$number_of_events $histfile | show_irrigations
+		fi
 	done
 }

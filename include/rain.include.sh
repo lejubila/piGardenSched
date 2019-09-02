@@ -56,20 +56,40 @@ delayirrigation()
 
 	#lst_irrgtn  #seconds of last irrigation
 	#chk_irrgtn  #seconds of scheduled irrigaion
+	(( to_time_irrgtn = chk_irrgtn ))
+	
+	[[ $debug = yes ]] && echo lst_irrgtn $lst_irrgtn $(date --date "@$lst_irrgtn")
+	[[ $debug = yes ]] && echo chk_irrgtn $chk_irrgtn $(date --date "@$chk_irrgtn")
+	[[ $debug = yes ]] && echo to_time_irrgtn $to_time_irrgtn $(date --date "@$to_time_irrgtn") prima
 
-	(( from_time_irrgtn = chk_irrgtn - 24*60*60 )) # 24 h less than chk_irrgtn
+	# correct time frame to check if chk_irrgtn isn't now
+	local delay_coefficient=0
+	while (( now != to_time_irrgtn ))
+	do
+		(( to_time_irrgtn = to_time_irrgtn + 24*60*60 ))
+		[[ $debug = yes ]] && echo to_time_irrgtn $to_time_irrgtn $(date --date "@$to_time_irrgtn") dopo
+		(( delay_coefficient += 1 )) # needed because to_time_irrgtn was at first loop equal to chk_irrgtn
+	done
+
+	(( from_time_irrgtn = to_time_irrgtn - 24*60*60 )) # 24 h less than chk_irrgtn
+	[[ $debug = yes ]] && echo from_time_irrgtn $from_time_irrgtn $(date --date "@$from_time_irrgtn")
 	local counter=0
 	while (( from_time_irrgtn >= lst_irrgtn ))
 	do
 		(( to_time_irrgtn = from_time_irrgtn + 24*60*60 )) # first cycle is equal chk_irrgtn
+		if [[ $debug = yes ]] ; then
+			echo awk -F: \""\\\$1>=$from_time_irrgtn && \\\$1<=$to_time_irrgtn\"" $RAINSENSORQTY_HISTORY \| tac 
+			awk -F: "\$1>=$from_time_irrgtn && \$1<=$to_time_irrgtn" $RAINSENSORQTY_HISTORY | tac 
+		fi
 		for rainline in $( awk -F: "\$1>=$from_time_irrgtn && \$1<=$to_time_irrgtn" $RAINSENSORQTY_HISTORY | tac )
 		do
+			[[ $debug = yes ]] && echo "in the loop: $rainline"
 			set -- ${rainline//:/ }
 			raintime=$1
 			rainlevel=$2
 	                echo "EV ${EVLABEL[$numline]} would have next irrigation on $(date --date "@$chk_irrgtn")"
 			printf "RAINED on %s for %.2f mm\n" "$(date --date="@$raintime")" $( $JQ -n "$rainlevel * $RAINSENSORQTY_MMEACH" )
-			(( daydelayed = dayfreq - counter ))
+			(( daydelayed = dayfreq + delay_coefficient - counter ))
 			#echo "EV ${EVLABEL[$numline]} irrigation delayed $daydelayed day(s) from $(date --date="@$chk_irrgtn")"
 			echo "EV ${EVLABEL[$numline]} irrigation delayed $daydelayed day(s)"
 			(( chk_irrgtn += daydelayed*24*60*60 ))
@@ -78,7 +98,7 @@ delayirrigation()
 		done
 		(( from_time_irrgtn -= 24*60*60 )) # decrease one day at time
 		(( counter += 1 ))
-		# DEBUG echo $from_time_irrgtn $to_time_irrgtn $counter
+		[[ $debug = yes ]] && echo "DEBUG $from_time_irrgtn $to_time_irrgtn $counter"
 	done
 	return 1
 }

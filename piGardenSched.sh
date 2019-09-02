@@ -169,17 +169,20 @@ case $1 in
 		fi
 		;;
 	history) history ;;
-	irrigation) 
-	        if [[ -n $2 ]] ; then
-			if [[ $2 =~ ^[0-9]$ || $2 =~ ^[0-9][0-9]$ ]] ; then
-				irrigation_history $2 
-			else
-				echo "ERROR: irrigation history parameter must be an integer with 1 or 2 digit"
-				exit 1
-			fi
-		else
-				irrigation_history 
-        	fi
+	irrigation) shift 
+		case $# in
+			2)
+				check_evalias $2 || { echo "ERROR: $2 is not a valid EV_ALIAS" ; exit 1 ; }
+				[[ $1 =~ ^[0-9]*$ ]] || { echo "ERROR: irrigation history parameter must be an integer" ; exit 1 ; }
+				irrigation_history $1 $2
+				;;
+			1)
+				[[ $1 =~ ^[0-9]*$ ]] || { echo "ERROR: irrigation history parameter must be an integer" ; exit 1 ; }
+				irrigation_history $1
+				;;
+			0) irrigation_history 
+				;;
+		esac
 		;;
 	enable) shift
 		[[ $# -ne 1 ]] && { echo "ERROR: 1 parameter needed after enable option" ; exit 1 ; }

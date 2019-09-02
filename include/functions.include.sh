@@ -2,8 +2,10 @@
 # piGardenSched
 # "functions.include.sh"
 # Author: androtto
-# VERSION=0.3.1f
-# 2019/08/13: irrigation history improved - not it manages last events
+# VERSION=0.3.2
+# 2019/09/02: rain delay fixed 
+# 2019/09/02: irrigation history improved - now it accepts ev_alias to display
+# 2019/08/13: irrigation history improved - now it accepts number of events to display
 # 2019/07/25: log reading is improved
 # 2019/07/15: help fixed
 #
@@ -65,9 +67,10 @@ $NAME_SCRIPT disable EV?_ALIAS
 	example $NAME_SCRIPT disable EV5_ALIAS
 $NAME_SCRIPT history
 	showing history for scheduled irrigations
-$NAME_SCRIPT irrigation [# events]
+$NAME_SCRIPT irrigation [# events] [EV?_ALIAS]
 	gets status of effective irrigations per each EV
 		number events is optional and if present it lists irrigations just for those numbers of events
+		EV?_ALIAS is optional and can be used to filter output
 $NAME_SCRIPT help|-h
 	print [this] help
 $NAME_SCRIPT 
@@ -137,7 +140,7 @@ parsingfilesched()
 					exit 1
 				fi
 				if [[ $# != 5 ]] ; then
-					echo "ERROR: there are not 5 field (; separated) in $line line"
+					echo "ERROR: there are not 5 fields (; separated) in $line line"
 					exit 1
 				fi
 				case ${ACTIVE[$numline]} in
@@ -303,6 +306,7 @@ do
    do
 		if [[ "$time_sched" == "$time_now" ]] ; then
 			echo # per rendere leggibile il log file
+			[[ $debug = "yes" ]] && echo "DEBUG: now is $now"
 
 			statfile=$STATDIR/${EVLABEL[$numline]}-${time_sched}.lastrun
 			histfile=$STATDIR/${EVLABEL[$numline]}-${time_sched}.history
@@ -324,7 +328,7 @@ do
 				echo "$(date) - EV ${EVLABEL[$numline]} next irrigation will be on \"$(date --date "@$chk_irrgtn")\" "
 				break
 			fi
-
+	
 			rain_integration
 			[[ -z $RAINCHECK ]] && { echo "ERROR: \$RAINCHECK not set" ; exit 1 ; }
 
@@ -350,7 +354,7 @@ do
    done
    (( numline+=1 ))
 done
-[[ -z $irrigated ]] && en_echo "NORMAL: no irrigation run at $time_now"
+#[[ -z $irrigated ]] && en_echo "NORMAL: no irrigation run at $time_now"
 }
 
 add_cfgheader()
@@ -929,12 +933,24 @@ show_irrigations()
 
 irrigation_history()
 {
-	# if $1 passes, that's number of events
+	# if $1 passed, that's number of events
 	number_of_events=$1
+	# if $2 passed, that's EV_ALIAS
+	if [[ -n $2 ]] ; then
+		if getidx evalias $2 ; then
+			evlabel=${EVLABEL[$idx]}
+			filelist="${evlabel}-irrigationhistory"
+		else
+			echo "ERROR in funct getidx"
+		fi
+	else
+		filelist='*-irrigationhistory'
+	fi
 	#set -x
-	cd $STATDIR
 
-	for histfile in *-irrigationhistory 
+	cd $STATDIR
+	#for histfile in *-irrigationhistory 
+	for histfile in $filelist
 	do
 		evlabel=${histfile//-*/}
 		echo -e "\nEV $evlabel history of effective irrigations"

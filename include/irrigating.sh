@@ -2,7 +2,9 @@
 # piGardenSched
 # irrigating script - call piGarden.sh open/close
 # Author: androtto
-# VERSION=0.3.1
+# VERSION=0.3.1f
+# 2019/08/18: called script with absolute path
+
 
 DIR_SCRIPT="$(cd `dirname $0` ; pwd )"
 NAME_SCRIPT=${0##*/}
@@ -29,7 +31,7 @@ if [[ $# = 0 ]] ; then
 	exit 1
 fi
 
-echo "called $NAME_SCRIPT $*"
+echo "called $DIR_SCRIPT/$NAME_SCRIPT $*"
 
 if [[ $# = 1 ]] ; then
 	type=SINGLE

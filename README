@@ -1,4 +1,4 @@
-VERSIONE 0.3.1
+VERSIONE 0.3.2
 --------------
 piGardenSched.sh e' un'alternativa allo schedulatore di piGarden basato sul crontab.
 Si consiglia di installarlo sotto la home dell'utente pi, quindi il percorso del package sara' /home/pi/piGardenSched
@@ -28,9 +28,9 @@ Al primo avvio verranno create le directory:
 	drwxr-xr-x 2 pi pi 4096 Apr 28 00:22 state
 	drwxr-xr-x 2 pi pi 4096 Apr 28 15:39 tmp
 Nella directory log troveremo ogni volta che viene lanciato da crontab (vedi successivamente per spiegazione dettagliata) il log principale (piGardenSched.log); troveremo inoltre un file di log per ogni combinazione di EV+orario di esecuzione (ZONA1_pratoSud-10:00.log).
-in state vengono registrate le attività di ogni EV schedulata nella sua ultima esecuzione (ZONA1_pratoSud-10:00.lastrun) e il suo storico (ZONA1_pratoSud-10:00.history)
+in state vengono registrate le attivita' di ogni EV schedulata nella sua ultima esecuzione (ZONA1_pratoSud-10:00.lastrun) e il suo storico (ZONA1_pratoSud-10:00.history)
 E' anche presente lo storico di ogni EV effettivamente aperta con l'orario e la durata (ZONA1_pratoSud-irrigationhistory).
-Più avanti vedremo quali sono le opzioni da passare a piGardenSched per consultare ed interpretare tali file di stato.
+Piu' avanti vedremo quali sono le opzioni da passare a piGardenSched per consultare ed interpretare tali file di stato.
 Infine in tmp vi sono i file temporanei creati/impiegati da piGardenSched durante il suo funzionamento.
 
 ATTIVAZIONE
@@ -39,7 +39,7 @@ Per poter essere attivato piGardenSched deve essere a sua volta presente in cron
 Esistono 3 opzioni per la gestione della propria entry in crontab da parte di piGardenSched.sh e sono:
 	cronadd crondel croncheck
 con la conseguente azione facilmente comprensibile.
-La prima cosa da fare ovviamente è copiare piGardenSched.conf da /home/pi/piGardenSched/conf/piGardenSched.conf, con il seguente comando:
+La prima cosa da fare ovviamente e' copiare piGardenSched.conf da /home/pi/piGardenSched/conf/piGardenSched.conf, con il seguente comando:
 	pi@raspberrypi:~/piGardenSched $ sudo cp conf/piGardenSched.conf /etc
 successivamente attivare la entry in crontab:
 	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh croncheck
@@ -53,7 +53,7 @@ successivamente attivare la entry in crontab:
 
 FILE DI CONFIGURAZIONE
 ----------------------
-/etc/piGardenSched.conf e' il file di configurazione.
+/etc/piGardenSched.conf e' il file di configurazione.
 Deve essere presente, altrimenti lo script non parte.
 Ecco il contenuto del file:
 	# pigarden config file	
@@ -143,7 +143,7 @@ Lo si puo' anche visualizzare direttamente, ma verranno visualizzati anche i com
 	EV1_ALIAS;20;14:00;1;active
 	pi@raspberrypi:~/piGardenSched $
 piGardenSched gestisce l'irrigazione sequenziale concatenando in sequenza le EV specificate attraverso l'opzione seq. Viene quindi schedulata solo la prima EV e le successive verranno comandate in sequenza.
-La sequenza deve coincidere con l'ordine numerico; cioè possono essere in sequenza le EV 1 2 3 4, oppure le 3 4 5, ma non le 4 3 6, ne' 2 3 5.
+La sequenza deve coincidere con l'ordine numerico; cioe' possono essere in sequenza le EV 1 2 3 4, oppure le 3 4 5, ma non le 4 3 6, ne' 2 3 5.
 Per poter funzionare il comando, la prima EV deve essere presente.
 Ad esempio, pur essendo corretta la sequenza del comando successivo, va in errore perche' EV2 non e' presente:
 	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh seq EV2_ALIAS EV3_ALIAS EV4_ALIAS
@@ -177,7 +177,7 @@ e conseguente verifica:
 	EV3_ALIAS;15;EV2_ALIAS;;
 	EV4_ALIAS;15;EV3_ALIAS;;
 	pi@raspberrypi:~/piGardenSched $
-La schedulazione con piu' orari e' solo possibile se la frequenza giornalier e' a 1.
+La schedulazione con piu' orari e' solo possibile se la frequenza giornaliera e' a 1.
 Ad oggi non vi e' nessun controllo se le schedulazioni sulla stessa EV si sovrappongono: EV1 con schedulazione 15:55 e 16:00 con durata di 15 minuti.
 
 E' possibile eliminare un orario dalla schedulazione:
@@ -280,7 +280,7 @@ Cosi' come non sono permessi errori specificando l'EV:
 	EV5_ALIAS;20;18:00;1;active
 	EV6_ALIAS;20;19:00;1;active
 	pi@raspberrypi:~/piGardenSched $
-Vengono fatti i controlli sugli ALIAS come abbiamo visto poco fa, sugli orari (23:61 non è permesso) e sulle durate e frequenze (numeri):
+Vengono fatti i controlli sugli ALIAS come abbiamo visto poco fa, sugli orari (23:61 non e' permesso) e sulle durate e frequenze (numeri):
 	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_dur EV5_ALIAS 20A
 	ERROR: 20A is not a valid duration in minutes
 	pi@raspberrypi:~/piGardenSched $ ./piGardenSched.sh change_dur EV5_ALIAS 20
@@ -618,5 +618,5 @@ Attiviamo anche la EV5 alle 22:45 cosi' vediamo come entra in gioco il comportam
 
 FUNZIONI SPECIALI
 -----------------
-L'eventuale creazione del file vuoto (touch DEBUG) nella directory /home/pi/piGardenSched/include (file esteso quindi /home/pi/piGardenSched/include/DEBUG) che impedisce l'effettiva esecuzione dell'apertura chiusura delle valvole. Modalità utile se si vuole testare il funzionamento del nuovo schedulatore prima di metterlo in produzione:
+L'eventuale creazione del file vuoto (touch DEBUG) nella directory /home/pi/piGardenSched/include (file esteso quindi /home/pi/piGardenSched/include/DEBUG) che impedisce l'effettiva esecuzione dell'apertura chiusura delle valvole. Modalita' utile se si vuole testare il funzionamento del nuovo schedulatore prima di metterlo in produzione:
 	-rw-r--r-- 1 pi pi     0 Apr 27 23:34 DEBUG

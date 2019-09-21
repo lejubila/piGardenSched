@@ -1,8 +1,8 @@
 # integration with Driver rainsensorqty - driver for measure the rain volume, for rain meter, for rain gauge
 # Author: androtto
 # file "rain.include.sh"
-# Version: 0.1.4
-# Data: 20/Mar/2019
+# Version: 0.3.3
+# Data: 15/Sep/2019
 # la pioggia può essere gestita con 3 modalita'- impostanod le variabili in /etc/piGarden.conf
 # 1) con sensore gestito direttamente da piGarden. Impostanto la variabile con la GPIO da utilizzare:
 #	RAIN_GPIO="25"
@@ -47,12 +47,33 @@ rainornot()
         fi
 }
 
+rain_tmphistory()
+{
+	TMPRAINSENSORQTY_HISTORY=$TMPDIR/rainsensorqty_history
+        [[ ! -f $RAINSENSORQTY_HISTORY ]] && touch $RAINSENSORQTY_HISTORY
+        [[ ! -f $RAINSENSORQTY_LASTRAIN ]] && return 1
+        if grep -q ^$(<$RAINSENSORQTY_LASTRAIN)$ $RAINSENSORQTY_HISTORY ; then
+                cat $RAINSENSORQTY_HISTORY > $TMPRAINSENSORQTY_HISTORY
+		[[ $debug = yes ]] && echo "DEBUG: \$RAINSENSORQTY_LASTRAIN already in $RAINSENSORQTY_HISTORY"
+                return 0
+        else
+                cat $RAINSENSORQTY_HISTORY $RAINSENSORQTY_LASTRAIN > $TMPRAINSENSORQTY_HISTORY
+		[[ $debug = yes ]] && echo "DEBUG: \$RAINSENSORQTY_LASTRAIN NOT already in $RAINSENSORQTY_HISTORY"
+                return 0
+        fi
+}
+
+
 delayirrigation()
 {
-	if [[ ! -f $RAINSENSORQTY_HISTORY ]] ; then
-		en_echo "NORMAL: no RAINSENSORQTY_HISTORY file"
+	if ! rain_tmphistory ; then
+		en_echo "NORMAL: it was't never rained"
 		return 2
 	fi
+#	if [[ ! -f $RAINSENSORQTY_HISTORY ]] ; then
+#		en_echo "NORMAL: no RAINSENSORQTY_HISTORY file"
+#		return 2
+#	fi
 
 	#lst_irrgtn  #seconds of last irrigation
 	#chk_irrgtn  #seconds of scheduled irrigaion
@@ -78,10 +99,12 @@ delayirrigation()
 	do
 		(( to_time_irrgtn = from_time_irrgtn + 24*60*60 )) # first cycle is equal chk_irrgtn
 		if [[ $debug = yes ]] ; then
-			echo awk -F: \""\\\$1>=$from_time_irrgtn && \\\$1<=$to_time_irrgtn\"" $RAINSENSORQTY_HISTORY \| tac 
-			awk -F: "\$1>=$from_time_irrgtn && \$1<=$to_time_irrgtn" $RAINSENSORQTY_HISTORY | tac 
+			echo awk -F: \""\\\$1>=$from_time_irrgtn && \\\$1<=$to_time_irrgtn\"" $TMPRAINSENSORQTY_HISTORY \| tac 
+			awk -F: "\$1>=$from_time_irrgtn && \$1<=$to_time_irrgtn" $TMPRAINSENSORQTY_HISTORY | tac 
+			echo tail $TMPRAINSENSORQTY_HISTORY
+			tail $TMPRAINSENSORQTY_HISTORY
 		fi
-		for rainline in $( awk -F: "\$1>=$from_time_irrgtn && \$1<=$to_time_irrgtn" $RAINSENSORQTY_HISTORY | tac )
+		for rainline in $( awk -F: "\$1>=$from_time_irrgtn && \$1<=$to_time_irrgtn" $TMPRAINSENSORQTY_HISTORY | tac )
 		do
 			[[ $debug = yes ]] && echo "in the loop: $rainline"
 			set -- ${rainline//:/ }

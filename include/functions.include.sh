@@ -2,13 +2,21 @@
 # piGardenSched
 # "functions.include.sh"
 # Author: androtto
-# VERSION=0.3.2
+# VERSION=0.3.3
+# 2019/09/12: setTMP_PATH added
 # 2019/09/02: rain delay fixed 
 # 2019/09/02: irrigation history improved - now it accepts ev_alias to display
 # 2019/08/13: irrigation history improved - now it accepts number of events to display
 # 2019/07/25: log reading is improved
 # 2019/07/15: help fixed
 #
+setTMP_PATH()
+{
+	if [[ $(df  | awk '$NF=="/tmp" {print $1}') != "tmpfs" ]] ; then
+		echo "WARNING: /tmp isn't a tmp file system"
+		echo "please add to your /etc/fstab file:\ntmpfs           /tmp            tmpfs   defaults,noatime,nosuid   0       0Â"
+	fi
+}
 
 d() # short date & time
 {
@@ -33,44 +41,44 @@ $NAME_SCRIPT stat|status
 	gets status of last scheduled irrigation
 $NAME_SCRIPT reset
 	resetting status of last irrigations
-$NAME_SCRIPT add EV?_ALIAS duration time frequency
+$NAME_SCRIPT add EV? duration time frequency
 	add schedule to $PIGARDENSCHED schedule file 
-	example $NAME_SCRIPT add EV5_ALIAS 10 10:30 1
-$NAME_SCRIPT del EV?_ALIAS
-	remove EV?_ALIAS from schedule file $PIGARDENSCHED
-	example $NAME_SCRIPT del EV5_ALIAS
-$NAME_SCRIPT change_dur EV?_ALIAS minutes
+	example $NAME_SCRIPT add EV5 10 10:30 1
+$NAME_SCRIPT del EV?
+	remove EV? from schedule file $PIGARDENSCHED
+	example $NAME_SCRIPT del EV5
+$NAME_SCRIPT change_dur EV? minutes
 	changes duration (only first occurance)
-	example $NAME_SCRIPT change_dur EV5_ALIAS 10
-$NAME_SCRIPT change_freq EV?_ALIAS days
+	example $NAME_SCRIPT change_dur EV5 10
+$NAME_SCRIPT change_freq EV? days
 	changes frequency (only first occurance)
-	example $NAME_SCRIPT change_freq EV5_ALIAS 1
-$NAME_SCRIPT change_time EV?_ALIAS time
+	example $NAME_SCRIPT change_freq EV5 1
+$NAME_SCRIPT change_time EV? time
 	changes schedule (removed if more than one)
-	example $NAME_SCRIPT change_time EV5_ALIAS 10:30 
-$NAME_SCRIPT add_time EV?_ALIAS time (frequency must be 1)
+	example $NAME_SCRIPT change_time EV5 10:30 
+$NAME_SCRIPT add_time EV? time (frequency must be 1)
 	add new schedule time to $PIGARDENSCHED schedule file
-	example $NAME_SCRIPT add_time EV5_ALIAS 13:50
-$NAME_SCRIPT del_time EV?_ALIAS time (frequency must be 1)
+	example $NAME_SCRIPT add_time EV5 13:50
+$NAME_SCRIPT del_time EV? time (frequency must be 1)
 	delete schedule time from $PIGARDENSCHED schedule file
-	example $NAME_SCRIPT del_time EV5_ALIAS 13:50
-$NAME_SCRIPT seq EV1_ALIAS EV2_ALIAS
+	example $NAME_SCRIPT del_time EV5 13:50
+$NAME_SCRIPT seq EV1 EV2
         create sequential irrigation as per indicated
-	example $NAME_SCRIPT seq EV1_ALIAS EV2_ALIAS EV3_ALIAS EV4_ALIAS
+	example $NAME_SCRIPT seq EV1 EV2 EV3 EV4
 $NAME_SCRIPT noseq
         convert sequential irrigation in scheduled irrigation (each EV with its scheduling)
-$NAME_SCRIPT enable EV?_ALIAS
-	enable EV?_ALIAS for scheduling in file $PIGARDENSCHED
-	example $NAME_SCRIPT enable EV5_ALIAS
-$NAME_SCRIPT disable EV?_ALIAS
-	disable EV?_ALIAS for scheduling in file $PIGARDENSCHED
-	example $NAME_SCRIPT disable EV5_ALIAS
+$NAME_SCRIPT enable EV?
+	enable EV? for scheduling in file $PIGARDENSCHED
+	example $NAME_SCRIPT enable EV5
+$NAME_SCRIPT disable EV?
+	disable EV? for scheduling in file $PIGARDENSCHED
+	example $NAME_SCRIPT disable EV5
 $NAME_SCRIPT history
 	showing history for scheduled irrigations
-$NAME_SCRIPT irrigation [# events] [EV?_ALIAS]
+$NAME_SCRIPT irrigation [# events] [EV?]
 	gets status of effective irrigations per each EV
 		number events is optional and if present it lists irrigations just for those numbers of events
-		EV?_ALIAS is optional and can be used to filter output
+		EV? is optional and can be used to filter output
 $NAME_SCRIPT help|-h
 	print [this] help
 $NAME_SCRIPT 
@@ -105,7 +113,7 @@ parsingfilesched()
 		DAYFREQ[$numline]=$4
 		ACTIVE[$numline]=$5
 
-		local alias=${EVALIAS[numline]}
+		local alias=${EVALIAS[numline]}_ALIAS
 		EVLABEL[$numline]=${!alias}
 		local alias=${EVALIAS[numline]/_*/}_NORAIN_RAINSENSORQTY
 		EVNORAINQTY[$numline]=${!alias}
@@ -308,8 +316,8 @@ do
 			echo # per rendere leggibile il log file
 			[[ $debug = "yes" ]] && echo "DEBUG: now is $now"
 
-			statfile=$STATDIR/${EVLABEL[$numline]}-${time_sched}.lastrun
-			histfile=$STATDIR/${EVLABEL[$numline]}-${time_sched}.history
+			statfile=$STATDIR/${EVALIAS[$numline]}-${time_sched}.lastrun
+			histfile=$STATDIR/${EVALIAS[$numline]}-${time_sched}.history
 #			echo DEBUG "$date_now - ${EVALIAS[$numline]} presente schedulazione - verifico se compatibile con frequenza"
 			dayfreq=${DAYFREQ[$numline]}
 			if [[ -f $statfile ]] ; then
@@ -364,8 +372,8 @@ echo "#piGarden.sched config file
 #version $VERSION.$SUB_VERSION.$RELEASE_VERSION
 #format file
 #1st field;2nd field;3rd field;4th field;5th field
-#EV?_alias;duration;time;every_X_days;active|inactive
-#EV?_alias;duration;EV?_previous
+#EV?;duration;time;every_X_days;active|inactive
+#EV?;duration;EV? #(previous)
 #time is HH:MM 24h format
 #every_X_days means daily frequency, 1= every day, 2=every three days (first yes, second no)),3= every three days (first yes, second and third no), etc..."
 #active or inactive enable|disable scheduling
@@ -375,11 +383,11 @@ echo "#piGarden.sched config file
 check_evalias()
 {
 	local evalias=$1
- 	if [[ $evalias =~ ^EV[0-9]_ALIAS$ || $evalias =~ ^EV[0-9][0-9]_ALIAS$ ]] ; then
-		# en_echo "NORMAL: $evalias format is right \"EV[0-9]_ALIAS or EV[0-9][0-9]_ALIAS\"" 
+ 	if [[ $evalias =~ ^EV[0-9]$ || $evalias =~ ^EV[0-9][0-9]$ ]] ; then
+		# en_echo "NORMAL: $evalias format is right \"EV[0-9] or EV[0-9][0-9]\"" 
 		: # do nothing
 	else
-		en_echo "ERROR: $evalias format is NOT right \"EV[0-9]_ALIAS or EV[0-9][0-9]_ALIAS\"" >&2
+		en_echo "ERROR: $evalias format is NOT right \"EV[0-9] or EV[0-9][0-9]\"" >&2
 		return 1
 	fi
        
@@ -760,7 +768,7 @@ sequential()
 	for ev in $evlist
 	do
 		if ! check_evalias $ev >/dev/null 2>&1 ; then
-			en_echo "ERROR: $ev is NOT a valid EV_ALIAS"
+			en_echo "ERROR: $ev is NOT a valid EV#/EV##"
 		 	return 1
 		fi
 	done
@@ -847,7 +855,7 @@ status()
 					echo -e "\nWARNING: irrigation for ${EVLABEL[$numline]} is at $time_sched every ${DAYFREQ[$numline]} day(s) - INACTIVE" 
 				fi
 				
-				statfile="${STATDIR}/${EVLABEL[$numline]}-${time_sched}.lastrun"
+				statfile="${STATDIR}/${EVALIAS[$numline]}-${time_sched}.lastrun"
 				if [[ -f $statfile ]] ; then
                 			lst_irrgtn="$(<$statfile)"
                 			echo "        last irrigation was     on $(date --date "@$lst_irrgtn" )"
@@ -935,7 +943,7 @@ irrigation_history()
 {
 	# if $1 passed, that's number of events
 	number_of_events=$1
-	# if $2 passed, that's EV_ALIAS
+	# if $2 passed, that's EV
 	if [[ -n $2 ]] ; then
 		if getidx evalias $2 ; then
 			evlabel=${EVLABEL[$idx]}
@@ -952,6 +960,10 @@ irrigation_history()
 	#for histfile in *-irrigationhistory 
 	for histfile in $filelist
 	do
+		if [[ ! -f $histfile ]] ; then
+			echo "Skipping EV $evlabel history ($filelist not found)"
+			continue
+		fi
 		evlabel=${histfile//-*/}
 		echo -e "\nEV $evlabel history of effective irrigations"
 		if [[ -z $number_of_events ]] ; then

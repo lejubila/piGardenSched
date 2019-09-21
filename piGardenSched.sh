@@ -3,10 +3,11 @@
 # pigarden sched
 # main script "piGardenSched.sh"
 # Author: androtto
-# VERSION=0.3.1d
+# VERSION=0.3.3
 VERSION=0
 SUB_VERSION=3
-RELEASE_VERSION=1d
+RELEASE_VERSION=3
+# 2019/09/13: TMPDIR changed
 # 2019/08/13: irrigation option has improved
 
 ##### MAIN
@@ -19,15 +20,15 @@ fi
 
 DIR_SCRIPT="$(cd `dirname $0` ; pwd )"
 NAME_SCRIPT=${0##*/}
-PIGARDEN_CONFIG_ETC="/etc/piGarden.conf"
-PIGARDENSCHED_CONF="/etc/piGardenSched.conf"
 FUNCTIONS=$DIR_SCRIPT/include/functions.include.sh
 RAINFUNCT=$DIR_SCRIPT/include/rain.include.sh
 CRONFUNCT=$DIR_SCRIPT/include/cron.include.sh
 LOGDIR="$DIR_SCRIPT/log" ; [ ! -d "$LOGDIR" ] && mkdir $LOGDIR
-TMPDIR="$DIR_SCRIPT/tmp" ; [ ! -d "$TMPDIR" ] && mkdir $TMPDIR
+TMPDIR="/tmp/${NAME_SCRIPT/.sh/}" ; [ ! -d "$TMPDIR" ] && mkdir $TMPDIR
 STATDIR="$DIR_SCRIPT/state" ; [ ! -d "$STATDIR" ] && mkdir $STATDIR
 irrigating=$DIR_SCRIPT/include/irrigating.sh
+cfgfiles=$DIR_SCRIPT/.cfgfiles
+. $cfgfiles || { echo "ERROR: while executing $cfgfiles or not found" ; exit 1 ; }
 
 for sourcefile in $PIGARDENSCHED_CONF $FUNCTIONS $RAINFUNCT $CRONFUNCT $PIGARDEN_CONFIG_ETC
 do
@@ -73,8 +74,8 @@ case $1 in
 		mv ${STATDIR}_$$.tar $TMPDIR
 		;;
 	add)    shift
-		[[ $# -ne 4 ]] && { en_echo "ERROR: 4 parameters needed\n$NAME_SCRIPT add EV?_ALIAS duration time frequency" ; exit 1 ; }
-		check_evalias $1 || { en_echo "ERROR: $1 is not a valid EV_ALIAS" ; exit 1 ; }
+		[[ $# -ne 4 ]] && { en_echo "ERROR: 4 parameters needed\n$NAME_SCRIPT add EV? duration time frequency" ; exit 1 ; }
+		check_evalias $1 || { en_echo "ERROR: $1 is not a valid EV" ; exit 1 ; }
 		check_number $2 || { echo "ERROR: $2 is not a valid duration in minutes" ; exit 1 ; }
 		check_timeformat $3 || { en_echo "ERROR: $3 is not a valid time" ; exit 1 ; }
 		check_number $4 || { echo "ERROR: $4 is not a valid frequency in days" ; exit 1 ; }
@@ -103,7 +104,7 @@ case $1 in
 		;;
 	change_dur)	shift
 		[[ $# -ne 2 ]] && { echo "ERROR: 2 parameters needed after change_dur option" ; exit 1 ; }
-		check_evalias $1 || { echo "ERROR: $1 is not a valid EV_ALIAS" ; exit 1 ; }
+		check_evalias $1 || { echo "ERROR: $1 is not a valid EV" ; exit 1 ; }
 		check_number $2 || { echo "ERROR: $2 is not a valid duration in minutes" ; exit 1 ; }
 		if modify duration $1 $2 ; then
 			en_echo "NORMAL: change done"
@@ -114,7 +115,7 @@ case $1 in
 		;;
 	change_freq)	shift
 		[[ $# -ne 2 ]] && { echo "ERROR: 2 parameters needed after change_freq option" ; exit 1 ; }
-		check_evalias $1 || { echo "ERROR: $1 is not a valid EV_ALIAS" ; exit 1 ; }
+		check_evalias $1 || { echo "ERROR: $1 is not a valid EV" ; exit 1 ; }
 		check_number $2 || { echo "ERROR: $2 is not a valid frequency in days" ; exit 1 ; }
 		if modify freq $1 $2 ; then
 			en_echo "NORMAL: change done"
@@ -125,7 +126,7 @@ case $1 in
 		;;
 	change_time)	shift
 		[[ $# -ne 2 ]] && { echo "ERROR: 2 parameters needed after change_time option" ; exit 1 ; }
-		check_evalias $1 || { echo "ERROR: $1 is not a valid EV_ALIAS" ; exit 1 ; }
+		check_evalias $1 || { echo "ERROR: $1 is not a valid EV" ; exit 1 ; }
 		check_timeformat $2 || { echo "ERROR: $2 is not a valid time" ; exit 1 ; }
 		if modify time $1 $2 ; then
 			en_echo "NORMAL: change done"
@@ -136,7 +137,7 @@ case $1 in
 		;;
 	del_time)	shift
 		[[ $# -ne 2 ]] && { echo "ERROR: 2 parameters needed after change_time option" ; exit 1 ; }
-		check_evalias $1 || { echo "ERROR: $1 is not a valid EV_ALIAS" ; exit 1 ; }
+		check_evalias $1 || { echo "ERROR: $1 is not a valid EV" ; exit 1 ; }
 		check_timeformat $2 || { echo "ERROR: $2 is not a valid time" ; exit 1 ; }
 		if remove_time $1 $2 ; then
 			en_echo "NORMAL: $2 removed from $1 entry"
@@ -147,7 +148,7 @@ case $1 in
 		;;
 	add_time)	shift
 		[[ $# -ne 2 ]] && { echo "ERROR: 2 parameters needed after add_time option" ; exit 1 ; }
-		check_evalias $1 || { echo "ERROR: $1 is not a valid EV_ALIAS" ; exit 1 ; }
+		check_evalias $1 || { echo "ERROR: $1 is not a valid EV" ; exit 1 ; }
 		check_timeformat $2 || { echo "ERROR: $2 is not a valid time" ; exit 1 ; }
 		if add_time $1 $2 ; then
 			en_echo "NORMAL: $2 added to $1 entry"
@@ -172,7 +173,7 @@ case $1 in
 	irrigation) shift 
 		case $# in
 			2)
-				check_evalias $2 || { echo "ERROR: $2 is not a valid EV_ALIAS" ; exit 1 ; }
+				check_evalias $2 || { echo "ERROR: $2 is not a valid EV" ; exit 1 ; }
 				[[ $1 =~ ^[0-9]*$ ]] || { echo "ERROR: irrigation history parameter must be an integer" ; exit 1 ; }
 				irrigation_history $1 $2
 				;;
@@ -186,7 +187,7 @@ case $1 in
 		;;
 	enable) shift
 		[[ $# -ne 1 ]] && { echo "ERROR: 1 parameter needed after enable option" ; exit 1 ; }
-		check_evalias $1 || { echo "ERROR: $1 is not a valid EV_ALIAS" ; exit 1 ; }
+		check_evalias $1 || { echo "ERROR: $1 is not a valid EV" ; exit 1 ; }
 		if modify enable $1 ; then
 			en_echo "NORMAL: change done"
 		else
@@ -196,7 +197,7 @@ case $1 in
 		;;
 	disable) shift
 		[[ $# -ne 1 ]] && { echo "ERROR: 1 parameter needed after disable option" ; exit 1 ; }
-		check_evalias $1 || { echo "ERROR: $1 is not a valid EV_ALIAS" ; exit 1 ; }
+		check_evalias $1 || { echo "ERROR: $1 is not a valid EV" ; exit 1 ; }
 		if modify disable $1 ; then
 			en_echo "NORMAL: change done"
 		else

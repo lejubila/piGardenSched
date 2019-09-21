@@ -2,14 +2,15 @@
 # pigarden sched
 # loop script between open and close command
 # Author: androtto
-# VERSION=0.3.0
+# VERSION=0.3.3
 
 DIR_SCRIPT="$(cd `dirname $0` ; pwd )"
 NAME_SCRIPT=${0##*/}
-PIGARDEN_CONFIG_ETC="/etc/piGarden.conf"
-PIGARDENSCHED_CONF="/etc/piGardenSched.conf"
 FUNCTIONS=$DIR_SCRIPT/functions.include.sh
 RAINFUNCT=$DIR_SCRIPT/rain.include.sh
+
+cfgfiles=$DIR_SCRIPT/../.cfgfiles
+. $cfgfiles || { echo "ERROR: while executing $cfgfiles or not found" ; exit 1 ; }
 
 for sourcefile in $PIGARDENSCHED_CONF $FUNCTIONS $RAINFUNCT $PIGARDEN_CONFIG_ETC
 do

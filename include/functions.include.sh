@@ -362,7 +362,7 @@ do
    done
    (( numline+=1 ))
 done
-#[[ -z $irrigated ]] && en_echo "NORMAL: no irrigation run at $time_now"
+[[ -z $irrigated ]] && en_echo "NORMAL: no irrigation run at $time_now"
 }
 
 add_cfgheader()

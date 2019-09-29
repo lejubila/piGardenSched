@@ -26,6 +26,7 @@ CRONFUNCT=$DIR_SCRIPT/include/cron.include.sh
 LOGDIR="$DIR_SCRIPT/log" ; [ ! -d "$LOGDIR" ] && mkdir $LOGDIR
 TMPDIR="/tmp/${NAME_SCRIPT/.sh/}" ; [ ! -d "$TMPDIR" ] && mkdir $TMPDIR
 STATDIR="$DIR_SCRIPT/state" ; [ ! -d "$STATDIR" ] && mkdir $STATDIR
+BCKDIR="$DIR_SCRIPT/bck" ; [ ! -d "$BCKDIR" ] && mkdir $BCKDIR
 irrigating=$DIR_SCRIPT/include/irrigating.sh
 cfgfiles=$DIR_SCRIPT/.cfgfiles
 . $cfgfiles || { echo "ERROR: while executing $cfgfiles or not found" ; exit 1 ; }
@@ -69,9 +70,8 @@ case $1 in
 		status
 		;;
 	reset)  en_echo "NORMAL: resetting irrigation status for all EVs"
-		tar cvf ${STATDIR}_$$.tar $STATDIR
+		tar cvf $BCKDIR/bck_STATDIR_$$.tar $STATDIR
 		rm $STATDIR/*
-		mv ${STATDIR}_$$.tar $TMPDIR
 		;;
 	add)    shift
 		[[ $# -ne 4 ]] && { en_echo "ERROR: 4 parameters needed\n$NAME_SCRIPT add EV? duration time frequency" ; exit 1 ; }

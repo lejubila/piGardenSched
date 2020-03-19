@@ -2,7 +2,8 @@
 # piGardenSched
 # "functions.include.sh"
 # Author: androtto
-# VERSION=0.3.3
+# VERSION=0.3.6
+# 2020/01/19: add EV#_PROGRESSIVE variables parsing
 # 2019/09/12: setTMP_PATH added
 # 2019/09/02: rain delay fixed 
 # 2019/09/02: irrigation history improved - now it accepts ev_alias to display
@@ -10,23 +11,48 @@
 # 2019/07/25: log reading is improved
 # 2019/07/15: help fixed
 #
+sec2date()
+{
+        date --date="@$1"
+}
+
+debug()
+{
+	if [[ $debug = "yes" ]] ; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+
+verbose()
+{
+	if [[ $verbose = "yes" ]] ; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+
 setTMP_PATH()
 {
 	if [[ $(df  | awk '$NF=="/tmp" {print $1}') != "tmpfs" ]] ; then
 		echo "WARNING: /tmp isn't a tmp file system"
-		echo "please add to your /etc/fstab file:\ntmpfs           /tmp            tmpfs   defaults,noatime,nosuid   0       0Â"
+		echo "please add to your /etc/fstab file:\ntmpfs           /tmp            tmpfs   defaults,noatime,nosuid   0       0"
 	fi
 }
 
 d() # short date & time
 {
-date '+%X-%x'
+	date '+%X-%x'
 }
 
 en_echo() # enhanched echo - check verbose variable
 {
         if [[ $1 =~ ERROR || $1 =~ WARNING || $verbose = yes ]] ; then
-		 echo -e "$(d) $*"
+		 echo -e "$(date) - $*"
 	fi
 }
 
@@ -120,9 +146,12 @@ parsingfilesched()
 		local alias=${EVALIAS[numline]/_*/}_NORAIN
 		EVNORAINCLASSIC[$numline]=${!alias}
 
+		local alias=${EVALIAS[numline]/_*/}_PROGRESSIVE_RAINSENSORQTY
+		EVPROGRESSIVE[$numline]=${!alias}
+
 		check_number ${LONG[$numline]} >/dev/null 2>&1 || { echo "ERROR: evalias $1 has duration with wrong format ($2)" ; exit 1 ; }
 
-		check_evalias ${EVALIAS[$numline]} >/dev/null 2>&1 || { echo "ERROR: evalias $1 is wrong format or NOT between range (EV_TOTAL = $EV_TOTAL )" ; exit 1 ; }
+		check_evalias ${EVALIAS[$numline]} >/dev/null 2>&1 || { echo "ERROR: evalias $1 is wrong format or NOT in range (EV_TOTAL = $EV_TOTAL )" ; exit 1 ; }
 		
 		(( num_timesched = 0 ))
 		for time_sched in ${TIME_SCHED[$numline]//,/ }
@@ -192,7 +221,7 @@ parsingfilesched()
 		fi
 	done
 	
-	#debugshowparsed
+	#debugshowparsed ; exit
 
 }
 
@@ -209,6 +238,7 @@ debugshowparsed()
 		echo \${EVLABEL[$numline]} ${EVLABEL[$numline]}
 		echo \${EVNORAINQTY[$numline]} ${EVNORAINQTY[$numline]}
 		echo \${EVNORAINCLASSIC[$numline]} ${EVNORAINCLASSIC[$numline]}
+		echo \${EVPROGRESSIVE[$numline]} ${EVPROGRESSIVE[$numline]}
 		echo
 	done
 	echo \${#SEQ[\@]} \${SEQ[\*]} ${#SEQ[@]} ${SEQ[*]}
@@ -251,6 +281,18 @@ statupdate_irrigation()
 	echo $2:$3 >> $STATDIR/${1}-irrigationhistory
 }
 
+reduce_irrigation()
+{
+if [[ -z $progressive_factor ]] ; then
+	progressive_factor=1
+fi
+$JQ -n "$1 * $progressive_factor " | $JQ 'if . == (.|floor) then
+.
+else
+(.|floor)+1
+end'
+}
+
 irrigazione()
 {
 
@@ -268,23 +310,47 @@ irrigazione()
 	evlist=""
 	evlist_label=""
 	if [[ $type = single ]] ; then
+		if [[ ${EVPROGRESSIVE[$numline]} == 1 ]] ; then
+			newlong=$( reduce_irrigation ${LONG[$numline]} )
+			if (( $newlong < ${LONG[$numline]} )) ; then
+				echo "${EVLABEL[$numline]} EV irrigation will be reduced from ${LONG[$numline]} to $newlong minutes because of partial rain and PROGRESSIVE irrigation settings"
+				LONG[$numline]=$newlong
+			fi
+		fi
 		evlist="${EVLABEL[$numline]}:${LONG[$numline]}"
 		evlist_label="${EVLABEL[$numline]}"
 	else # concatenated
+		prevprog=0 # use to heritage progressive settings from main EV of concatenation
 		for evalias in ${SEQ[$seqnum]}
 		do
-			#loop for getting EVLABEL
-		        for ((i=1;i<=maxline;i++))
-       			do
-				if [[ ${EVALIAS[$i]} = $evalias ]] ; then
-					: #i set correctly when exiting
-					break
-				fi
-        		done
-			#end loop for getting EVLABEL - $i now set 
+	                if ! getidx evalias $evalias ; then
+				echo "ERROR: in function \"getidx evalias \$evalias ($evalias)\" "
+			fi
 
-			evlist="$evlist ${EVLABEL[$i]}:${LONG[$i]}"
-			evlist_label="$evlist_label ${EVLABEL[$i]}"
+			#loop for getting EVLABEL
+#		        for ((i=1;i<=maxline;i++))
+#       			do
+#				if [[ ${EVALIAS[$i]} = $evalias ]] ; then
+#					: # $i set correctly when exiting
+#					break
+#				fi
+#        		done
+#			#end loop for getting EVLABEL - $i now set 
+
+			if [[ ${EVPROGRESSIVE[$idx]} == 1 || $prevprog == 1 ]] ; then
+				prevprog=1
+				#verbose && echo "progressive irrigation enabled"
+				#echo ${LONG[$idx]} prima
+				newlong=$( reduce_irrigation ${LONG[$idx]} )
+				if (( $newlong < ${LONG[$idx]} )) ; then
+					echo "${EVLABEL[$idx]} EV irrigation will be reduced from ${LONG[$idx]} to $newlong minutes because of partial rain and PROGRESSIVE irrigation settings"
+					LONG[$idx]=$newlong
+				fi
+				#echo ${LONG[$idx]} dopo
+			fi
+
+			evlist="$evlist ${EVLABEL[$idx]}:${LONG[$idx]}"
+			evlist_label="$evlist_label ${EVLABEL[$idx]}"
 		done
 	fi
 
@@ -314,7 +380,8 @@ do
    do
 		if [[ "$time_sched" == "$time_now" ]] ; then
 			echo # per rendere leggibile il log file
-			[[ $debug = "yes" ]] && echo "DEBUG: now is $now"
+			debug && echo "DEBUG: now is $now"
+			echo "DEBUG: now is $now"
 
 			statfile=$STATDIR/${EVALIAS[$numline]}-${time_sched}.lastrun
 			histfile=$STATDIR/${EVALIAS[$numline]}-${time_sched}.history
@@ -325,15 +392,16 @@ do
 				lst_irrgtn="$(<$statfile)"
 				(( now == lst_irrgtn )) && { echo "ERROR in DEBUG: now = lst_irrgtn"; exit 1; }
 				(( chk_irrgtn=lst_irrgtn+dayfreq*24*60*60 ))
-				echo "$(date) - EV ${EVLABEL[$numline]} last irrigation was on \"$(date --date="@$lst_irrgtn")\" "
+				echo "$(date) - EV ${EVLABEL[$numline]} last irrigation was on \"$(sec2date $lst_irrgtn)\" "
 			else
 				# non c'e' il file con l'ultima erogazione
 				(( lst_irrgtn = now-dayfreq*24*60*60 ))
 				(( chk_irrgtn = lst_irrgtn+dayfreq*24*60*60 )) # = now
 			fi
+			echo "$(date) - EV ${EVLABEL[$numline]} irrigation is every $dayfreq day(s) at $time_sched"
 
 			if (( now < chk_irrgtn )) ; then 
-				echo "$(date) - EV ${EVLABEL[$numline]} next irrigation will be on \"$(date --date "@$chk_irrgtn")\" "
+				echo "$(date) - EV ${EVLABEL[$numline]} next irrigation will be on $(sec2date $chk_irrgtn)"
 				break
 			fi
 	
@@ -342,6 +410,15 @@ do
 
 			if [[ $RAINCHECK = "rainsensorqty" && $autodelayrain = yes ]] ; then
 				delayirrigation # if rain in previous days, it changes chk_irrgtn if needed
+				exit_stat=$?
+				case $exit_stat in
+					0) : #delay because of rain
+						;;
+					1) : #no delay
+						;;
+					2) : #progressive enabled 
+						;;
+				esac
 			fi
 				
 			#echo DEBUG chk_irrgtn $chk_irrgtn lst_irrgtn $lst_irrgtn
@@ -349,20 +426,20 @@ do
 			# after # as set in sched config file
 			if (( now > chk_irrgtn )) ; then 
 				(( days_late = (now-chk_irrgtn)/86400 ))
-				echo "$(date) - START IRRIGATION ${EVLABEL[$numline]} after $days_late days late (would be on $(date --date "@$chk_irrgtn")"
+				echo "$(date) - START IRRIGATION ${EVLABEL[$numline]} after $days_late day(s) late (would be on $(sec2date $chk_irrgtn)"
 				irrigazione
 			elif (( now == chk_irrgtn )) ; then 
-				echo "$(date) - START IRRIGATION ${EVLABEL[$numline]} after $(( (now-lst_irrgtn)/86400 )) days"
+				echo "$(date) - START IRRIGATION ${EVLABEL[$numline]} after $(( (now-lst_irrgtn)/86400 )) day(s)"
 				irrigazione
 			elif (( now < chk_irrgtn )) ; then 
-				echo "$(date) - EV ${EVLABEL[$numline]} next irrigation will be on $(date --date "@$chk_irrgtn")"
+				echo "$(date) - EV ${EVLABEL[$numline]} next irrigation will be on $(sec2date $chk_irrgtn) - delayed"
 			fi
 		fi
 #	echo DEBUG ${EVALIAS[$numline]} ${LONG[$numline]} ${TIME_SCHED[$numline]} ${DAYFREQ[$numline]}
    done
    (( numline+=1 ))
 done
-[[ -z $irrigated ]] && en_echo "NORMAL: no irrigation run at $time_now"
+# [[ -z $irrigated ]] && en_echo "NORMAL: no irrigation run at $time_now"
 }
 
 add_cfgheader()
@@ -395,10 +472,10 @@ check_evalias()
 #	evnumber=$(echo $evalias | tr -dc '0-9')
 	evnumber="${evalias//[!0-9]/}"
 	if (( evnumber <= EV_TOTAL )) ; then
-		#en_echo "NORMAL: $evalias is between range (EV_TOTAL = $EV_TOTAL )" 
+		#en_echo "NORMAL: $evalias is in range (EV_TOTAL = $EV_TOTAL )" 
 		: # do nothing
 	else
-		en_echo "ERROR: $evalias is NOT between range (EV_TOTAL = $EV_TOTAL )" >&2
+		en_echo "ERROR: $evalias is NOT in range (EV_TOTAL = $EV_TOTAL )" >&2
 		return 1
 	fi
 	return 0
@@ -858,10 +935,10 @@ status()
 				statfile="${STATDIR}/${EVALIAS[$numline]}-${time_sched}.lastrun"
 				if [[ -f $statfile ]] ; then
                 			lst_irrgtn="$(<$statfile)"
-                			echo "        last irrigation was     on $(date --date "@$lst_irrgtn" )"
+                			echo "        last irrigation was     on $(sec2date $lst_irrgtn)"
 					dayfreq=${DAYFREQ[$numline]}
 					(( nxt_irrgtn=lst_irrgtn+dayfreq*24*60*60 ))
-					echo "        next irrigation will be on $(date --date "@$nxt_irrgtn" )"
+					echo "        next irrigation will be on $(sec2date $nxt_irrgtn)"
 				else
                 			echo "        no previous irrigation"
 					echo "        next irrigation will be today/tomorrow at $time_sched"
@@ -921,7 +998,7 @@ history()
 			#timesched=$2
 			for date in $(< $file ) 
 			do
-				date --date "@$date"
+				sec2date $date
 			done 
 		done
 	done
@@ -935,7 +1012,7 @@ show_irrigations()
 		set -- ${line//:/ }
 		start=$1
 		mins=$2
-		echo "$(date --date "@$start") for $mins mins"
+		echo "$(sec2date $start) for $mins mins"
 	done 
 }
 

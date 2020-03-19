@@ -1,8 +1,8 @@
 # integration with Driver rainsensorqty - driver for measure the rain volume, for rain meter, for rain gauge
 # Author: androtto
 # file "rain.include.sh"
-# Version: 0.3.3
-# Data: 15/Sep/2019
+# Version: 0.3.6
+# Data: 01/Jan/2020
 # la pioggia può essere gestita con 3 modalita'- impostanod le variabili in /etc/piGarden.conf
 # 1) con sensore gestito direttamente da piGarden. Impostanto la variabile con la GPIO da utilizzare:
 #	RAIN_GPIO="25"
@@ -14,115 +14,140 @@
 # 3) con il driver rainsensorqty, valorizzando la variabile:
 #	RAIN_GPIO="drv:rainsensorqty:25" , dove il secondo campo indica quale driver attivare sotto piGarden/drv e il 3° quale GPIO usare
 
-
-check_lastrain()
-{
-	if [ -f "$RAINSENSORQTY_LASTRAIN" ] ; then
-		lastrain="$( cat "$RAINSENSORQTY_LASTRAIN" | $CUT -f 1 -d: )"
-		counter="$( cat "$RAINSENSORQTY_LASTRAIN" | $CUT -f 2 -d: )"
-		if [[ -z $lastrain || -z $counter ]] ; then
-			echo -e "\nERROR: file $RAINSENSORQTY_LASTRAIN empty or wrong format"
-			lastrain=0
-			rainlevel=0
-			counter=0
-		fi
-	        rainlevel=$( $JQ -n "$counter/$RAINSENSORQTY_LOOPSFORSETRAINING" | $JQ 'floor' )
-	else
-		lastrain=0
-		rainlevel=0
-		counter=0
-	fi
-}
-
+rained()
 # true no irrigation - false irrigation
-#check rain in last 5 minures
-rainornot()
+#check rain in last 24h hours 
 {
-	check_lastrain
-	(( fiveminutesago = $(date +%s )-5*60 ))
-	if ((  lastrain >= fiveminutesago )) ; then
-                return 0 # rain
+	if [[ ! -f $RAINSENSORQTY_HISTORYRAW ]] ; then
+		en_echo "NORMAL: it NEVER RAINED"
+		return 1
+	fi
+	now="$( date '+%s' )"
+	(( before24h=now-24*60*60 ))
+	if debug ; then
+		echo $before24h ---- $now
+		echo $( sec2date $before24h ) ---- $( sec2date $now )
+		echo awk -F: \'"\$1>=$before24h && \$1<=$now"\' $RAINSENSORQTY_HISTORYRAW
+		awk -F: "\$1>=$before24h && \$1<=$now" $RAINSENSORQTY_HISTORYRAW
+	fi
+
+	if ! rainlines="$(raintimeframe $before24h $now)" ; then
+		echo "ERROR: in raintimeframe function"
+		exit 99 
+	fi
+
+	if debug ; then
+		echo "DEBUG: \$rainlines = $rainlines"
+	fi
+
+	if (( $rainlines >= $RAINSENSORQTY_LOOPSFORSETRAINING )) ; then
+		printf "\nRAINED for %.2f mm between %s and %s \n" $( $JQ -n "$rainlines * $RAINSENSORQTY_MMEACH" ) "$(sec2date $before24h)" "$(sec2date $now)" 
+                return 0 # rained
 	else
-                return 1 # norain
+		if verbose ; then
+			if (( $rainlines == 0 )) ; then
+				echo "NORMAL: not rained in last 24h"
+			else
+			#	printf "\nRAINED only for %.2f mm between %s and %s \n" $( $JQ -n "$rainlines * $RAINSENSORQTY_MMEACH" ) "$(sec2date $before24h)" "$(sec2date $now)" 
+				printf "\nRAINED only for %.2f mm in last 24h \n" $( $JQ -n "$rainlines * $RAINSENSORQTY_MMEACH" )
+			fi
+		fi
+       	        return 1 # not rained
         fi
 }
 
-rain_tmphistory()
+raintimeframe()
 {
-	TMPRAINSENSORQTY_HISTORY=$TMPDIR/rainsensorqty_history
-        [[ ! -f $RAINSENSORQTY_HISTORY ]] && touch $RAINSENSORQTY_HISTORY
-        [[ ! -f $RAINSENSORQTY_LASTRAIN ]] && return 1
-        if grep -q ^$(<$RAINSENSORQTY_LASTRAIN)$ $RAINSENSORQTY_HISTORY ; then
-                cat $RAINSENSORQTY_HISTORY > $TMPRAINSENSORQTY_HISTORY
-		[[ $debug = yes ]] && echo "DEBUG: \$RAINSENSORQTY_LASTRAIN already in $RAINSENSORQTY_HISTORY"
-                return 0
-        else
-                cat $RAINSENSORQTY_HISTORY $RAINSENSORQTY_LASTRAIN > $TMPRAINSENSORQTY_HISTORY
-		[[ $debug = yes ]] && echo "DEBUG: \$RAINSENSORQTY_LASTRAIN NOT already in $RAINSENSORQTY_HISTORY"
-                return 0
-        fi
+	[[ $# != 2 ]] && return 1
+	local from=$1
+	local to=$2
+ 	awk -F: "\$1>=$from && \$1<=$to" $RAINSENSORQTY_HISTORYRAW | wc -l
 }
-
 
 delayirrigation()
 {
-	if ! rain_tmphistory ; then
-		en_echo "NORMAL: it was't never rained"
-		return 2
+	if [[ ! -f $RAINSENSORQTY_HISTORYRAW ]] ; then
+		en_echo "NORMAL: it NEVER RAINED"
+		return 1
 	fi
-#	if [[ ! -f $RAINSENSORQTY_HISTORY ]] ; then
-#		en_echo "NORMAL: no RAINSENSORQTY_HISTORY file"
-#		return 2
-#	fi
 
 	#lst_irrgtn  #seconds of last irrigation
-	#chk_irrgtn  #seconds of scheduled irrigaion
+	#chk_irrgtn  #seconds of scheduled irrigation
 	(( to_time_irrgtn = chk_irrgtn ))
 	
-	[[ $debug = yes ]] && echo lst_irrgtn $lst_irrgtn $(date --date "@$lst_irrgtn")
-	[[ $debug = yes ]] && echo chk_irrgtn $chk_irrgtn $(date --date "@$chk_irrgtn")
-	[[ $debug = yes ]] && echo to_time_irrgtn $to_time_irrgtn $(date --date "@$to_time_irrgtn") prima
+	debug && echo lst_irrgtn $lst_irrgtn $(sec2date $lst_irrgtn)
+	debug && echo chk_irrgtn $chk_irrgtn $(sec2date $chk_irrgtn)
+	debug && echo to_time_irrgtn $to_time_irrgtn $(sec2date $to_time_irrgtn) prima
 
 	# correct time frame to check if chk_irrgtn isn't now
 	local delay_coefficient=0
 	while (( now != to_time_irrgtn ))
 	do
-		(( to_time_irrgtn = to_time_irrgtn + 24*60*60 ))
-		[[ $debug = yes ]] && echo to_time_irrgtn $to_time_irrgtn $(date --date "@$to_time_irrgtn") dopo
+		(( to_time_irrgtn += 24*60*60 ))
+		debug && echo to_time_irrgtn $to_time_irrgtn $(sec2date $to_time_irrgtn) dopo
 		(( delay_coefficient += 1 )) # needed because to_time_irrgtn was at first loop equal to chk_irrgtn
 	done
+	verbose && (( delay_coefficient > 0 )) && echo "$(date) - EV ${EVLABEL[$numline]} previous irrigation was delayed (now is $delay_coefficient day(s) later)"
 
 	(( from_time_irrgtn = to_time_irrgtn - 24*60*60 )) # 24 h less than chk_irrgtn
-	[[ $debug = yes ]] && echo from_time_irrgtn $from_time_irrgtn $(date --date "@$from_time_irrgtn")
+	debug && echo from_time_irrgtn $from_time_irrgtn $(sec2date $from_time_irrgtn)
 	local counter=0
+	declare -g progressive_factor
+	(( progressive_factor = 1 ))
 	while (( from_time_irrgtn >= lst_irrgtn ))
 	do
 		(( to_time_irrgtn = from_time_irrgtn + 24*60*60 )) # first cycle is equal chk_irrgtn
-		if [[ $debug = yes ]] ; then
-			echo awk -F: \""\\\$1>=$from_time_irrgtn && \\\$1<=$to_time_irrgtn\"" $TMPRAINSENSORQTY_HISTORY \| tac 
-			awk -F: "\$1>=$from_time_irrgtn && \$1<=$to_time_irrgtn" $TMPRAINSENSORQTY_HISTORY | tac 
-			echo tail $TMPRAINSENSORQTY_HISTORY
-			tail $TMPRAINSENSORQTY_HISTORY
+		if debug  ; then
+			echo $from_time_irrgtn ---- $to_time_irrgtn
+			echo $( sec2date $from_time_irrgtn ) ---- $( sec2date $to_time_irrgtn )
+			echo awk -F: \'"\$1>=$from_time_irrgtn && \$1<=$to_time_irrgtn"\' $RAINSENSORQTY_HISTORYRAW
+#			awk -F: "\$1>=$from_time_irrgtn && \$1<=$to_time_irrgtn" $RAINSENSORQTY_HISTORYRAW
 		fi
-		for rainline in $( awk -F: "\$1>=$from_time_irrgtn && \$1<=$to_time_irrgtn" $TMPRAINSENSORQTY_HISTORY | tac )
-		do
-			[[ $debug = yes ]] && echo "in the loop: $rainline"
-			set -- ${rainline//:/ }
-			raintime=$1
-			rainlevel=$2
-	                echo "EV ${EVLABEL[$numline]} would have next irrigation on $(date --date "@$chk_irrgtn")"
-			printf "RAINED on %s for %.2f mm\n" "$(date --date="@$raintime")" $( $JQ -n "$rainlevel * $RAINSENSORQTY_MMEACH" )
+		if ! rainlines="$(raintimeframe $from_time_irrgtn $to_time_irrgtn)" ; then
+			echo "ERROR: in raintimeframe function"
+			exit 99 
+		fi
+		debug && echo "DEBUG: \$rainlines = $rainlines"
+		if (( counter == 0 )) ; then
+			timeframe="in last 24 hours"
+			# progressive session:
+			if ((  $rainlines > 0 && $rainlines < $RAINSENSORQTY_LOOPSFORSETRAINING )) ; then
+				rainlines_last24=$rainlines # only for debug, not needed
+				progressive_factor=$( $JQ -n "1-($rainlines / $RAINSENSORQTY_LOOPSFORSETRAINING )" )
+#				echo \$rainlines_last24 \$RAINSENSORQTY_LOOPSFORSETRAINING \$progressive_factor
+#				echo $rainlines_last24 $RAINSENSORQTY_LOOPSFORSETRAINING $progressive_factor
+			fi
+		else
+			timeframe="ranging from within $(( counter*24 )) to $(( (counter+1)*24 )) hours ago"
+		fi
+
+		if (( $rainlines >= $RAINSENSORQTY_LOOPSFORSETRAINING )) ; then
+#			printf "it WAS RAINING for %.2f mm between %s and %s \n" $( $JQ -n "$rainlines * $RAINSENSORQTY_MMEACH" ) "$(sec2date $from_time_irrgtn)" "$(sec2date $to_time_irrgtn)" 
+			printf "it WAS RAINING for %.2f mm %s \n" $( $JQ -n "$rainlines * $RAINSENSORQTY_MMEACH" ) "$timeframe"
+	                echo "EV ${EVLABEL[$numline]} would have next irrigation on $(sec2date $chk_irrgtn)"
 			(( daydelayed = dayfreq + delay_coefficient - counter ))
-			#echo "EV ${EVLABEL[$numline]} irrigation delayed $daydelayed day(s) from $(date --date="@$chk_irrgtn")"
-			echo "EV ${EVLABEL[$numline]} irrigation delayed $daydelayed day(s)"
+			#echo "EV ${EVLABEL[$numline]} irrigation delayed $daydelayed day(s) from $(sec2date $chk_irrgtn)"
+			echo "EV ${EVLABEL[$numline]} irrigation delayed $daydelayed day(s) from previous scheduling (on $(sec2date $chk_irrgtn) )"
 			(( chk_irrgtn += daydelayed*24*60*60 ))
 			return 0
-#			break 2
-		done
+		else
+#			verbose && printf "it WAS NOT RAINING between %s and %s \n" "$(sec2date $from_time_irrgtn)" "$(sec2date $to_time_irrgtn)" 
+			verbose && echo "it WAS NOT RAINING $timeframe"
+		fi
 		(( from_time_irrgtn -= 24*60*60 )) # decrease one day at time
 		(( counter += 1 ))
-		[[ $debug = yes ]] && echo "DEBUG $from_time_irrgtn $to_time_irrgtn $counter"
+		debug && echo "DEBUG $from_time_irrgtn $to_time_irrgtn $counter"
 	done
+	if [[ ${EVPROGRESSIVE[$numline]} = 1 ]] ; then
+		if [[ $progressive_factor < 1 ]] ; then
+			printf "PROGRESSIVE ENABLED - irrigation will be reduced to %.2f %s because it WAS RAINING for %.2f mm %s \n" $( $JQ -n "$progressive_factor * 100") '%' $( $JQ -n "$rainlines_last24 * $RAINSENSORQTY_MMEACH" ) "in last 24 hours"
+		else
+			verbose && echo "PROGRESSIVE ENABLED - no irrigation reduction because of no partial raining"
+		fi
+#		echo "progressive enabled, \$progressive_factor = $progressive_factor"
+		return 2
+	fi
+#	echo 'no progressive / no rain (end loop)'
 	return 1
 }
 
@@ -131,7 +156,8 @@ rain_integration()
 	RAINCHECK=""
 	# check which "rain" service is active
 	if [[ -n $WEATHER_SERVICE && $WEATHER_SERVICE != "none" ]] ; then
-		en_echo "NORMAL: WEATHER_SERVICE active ($WEATHER_SERVICE) - no integration with piGardenSched needed"
+		#en_echo "NORMAL: WEATHER_SERVICE active ($WEATHER_SERVICE) - no integration with piGardenSched needed"
+		en_echo "NORMAL: WEATHER_SERVICE active $WEATHER_SERVICE - no integration with piGardenSched needed"
 		RAINCHECK="WEATHER_SERVICE"
 	elif [[ $RAIN_GPIO =~ ^[0-9]*$ ]] ; then
 		en_echo "NORMAL: piGarden native RAIN sensor active - no integration with piGardenSched needed"

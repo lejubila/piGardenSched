@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/bin/bash
 # pigarden sched
 # loop script between open and close command
 # Author: androtto
@@ -44,8 +44,8 @@ shift
 case $1 in
 	raincheck)
 		if raincheck ; then
-			if rainornot ; then
-		        	printf "RAINED on %s for %.2f mm\n" "$(date --date="@$lastrain")" $( $JQ -n "$counter * $RAINSENSORQTY_MMEACH" )
+			if rained ; then
+		        	#printf "RAINED on %s for %.2f mm\n" "$(date --date="@$lastrain")" $( $JQ -n "$counter * $RAINSENSORQTY_MMEACH" )
 				exit 0 # 0 for rain	
 			else
 				exit 1 # 1 for not rain
@@ -66,8 +66,8 @@ echo -e "waiting $minutes minutes \c"
 while (( min <= minutes ))
 do
 	if ( [[ $raincheck_disabled = "false" ]] && raincheck ) ; then
-		if rainornot ; then
-        		printf "\nRAINED on %s for %.2f mm" "$(date --date="@$lastrain")" $( $JQ -n "$counter * $RAINSENSORQTY_MMEACH" )
+		if rained ; then
+        		#printf "\nRAINED on %s for %.2f mm" "$(date --date="@$lastrain")" $( $JQ -n "$counter * $RAINSENSORQTY_MMEACH" )
 			break
 		fi 
 	else

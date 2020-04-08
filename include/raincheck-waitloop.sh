@@ -1,8 +1,10 @@
 #!/bin/bash
-# pigarden sched
+# piGardenSched
 # loop script between open and close command
 # Author: androtto
-# VERSION=0.3.3
+# VERSION=0.3.6
+# 2020/04/07: calling raincheck silent inside loop
+
 
 DIR_SCRIPT="$(cd `dirname $0` ; pwd )"
 NAME_SCRIPT=${0##*/}
@@ -37,15 +39,14 @@ fi
 rain_integration
 [[ -z $RAINCHECK ]] && { echo "ERROR: \$RAINCHECK not set" ; exit 1 ; }
 
-#echo DEBUG \$evlabel \$idx \${EVLABEL[$idx]} \${EVALIAS[$idx]} \${EVNORAINQTY[$idx]} \${EVNORAINCLASSIC[$idx]} 
-#echo DEBUG $evlabel $idx ${EVLABEL[$idx]} ${EVALIAS[$idx]} ${EVNORAINQTY[$idx]} ${EVNORAINCLASSIC[$idx]}  
+debug && echo DEBUG \$evlabel \$idx \${EVLABEL[$idx]} \${EVALIAS[$idx]} \${EVNORAINQTY[$idx]} \${EVNORAINCLASSIC[$idx]} 
+debug && echo DEBUG $evlabel $idx ${EVLABEL[$idx]} ${EVALIAS[$idx]} ${EVNORAINQTY[$idx]} ${EVNORAINCLASSIC[$idx]}  
 
 shift
 case $1 in
 	raincheck)
 		if raincheck ; then
 			if rained ; then
-		        	#printf "RAINED on %s for %.2f mm\n" "$(date --date="@$lastrain")" $( $JQ -n "$counter * $RAINSENSORQTY_MMEACH" )
 				exit 0 # 0 for rain	
 			else
 				exit 1 # 1 for not rain
@@ -59,23 +60,20 @@ case $1 in
 esac
 
 min=1
-#minutes=5 # debug
 
-raincheck_disabled=false # used to show WARNING just once
 echo -e "waiting $minutes minutes \c"
 while (( min <= minutes ))
 do
-	if ( [[ $raincheck_disabled = "false" ]] && raincheck ) ; then
+	if raincheck silent ; then
 		if rained ; then
-        		#printf "\nRAINED on %s for %.2f mm" "$(date --date="@$lastrain")" $( $JQ -n "$counter * $RAINSENSORQTY_MMEACH" )
-			break
+			exit 0 # 0 for rain	
 		fi 
 	else
 		raincheck_disabled="true"
 	fi
-#	sleep 10 # debug
 	sleep 60
 	(( min += 1 ))
 	echo -e ".\c"
 done
 echo
+exit 1 # 1 for not rain

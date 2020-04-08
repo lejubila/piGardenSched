@@ -13,6 +13,7 @@
 #	WEATHER_SERVICE="wunderground"
 # 3) con il driver rainsensorqty, valorizzando la variabile:
 #	RAIN_GPIO="drv:rainsensorqty:25" , dove il secondo campo indica quale driver attivare sotto piGarden/drv e il 3° quale GPIO usare
+# 2020/04/07: added raincheck silent option
 
 rained()
 # true no irrigation - false irrigation
@@ -168,31 +169,36 @@ rain_integration()
 	fi
 }
 
+silent()
+{
+	[[ $silent == yes ]] && return 0 || return 1
+}
 
 raincheck()
 {
+	[[ $1 == "silent" ]] && silent=yes
         if [[ $RAINCHECK = "rainsensorqty" && $autostoprain = yes ]] ; then
-                en_echo 'NORMAL: $RAIN_GPIO is "drv:rainsensorqty" and "$autostoprain" yes - raincheck'
+                silent || en_echo 'NORMAL: $RAIN_GPIO is "drv:rainsensorqty" and "$autostoprain" yes - raincheck'
                 if [[ -z ${EVNORAINQTY[$idx]} || ${EVNORAINQTY[$idx]} = 0 ]] ; then
-                        en_echo "NORMAL: \${EVNORAINQTY[$idx]} is 0 (or null) - raincheck QTY for ${EVLABEL[$idx]} is active"
+                        silent || en_echo "NORMAL: \${EVNORAINQTY[$idx]} is 0 (or null) - raincheck QTY for ${EVLABEL[$idx]} is active"
 			if [[ -z ${EVNORAINCLASSIC[$idx]} || ${EVNORAINCLASSIC[$idx]} = 0 ]] ; then
-                        	en_echo "WARNING: \${EVNORAINCLASSIC[$idx]} is 0 (or null) - classic raincheck for ${EVLABEL[$idx]} enabled\n\tCONFLICTS with \${EVNORAINQTY[$idx]} - two methods will check rain"
+                        	silent || en_echo "WARNING: \${EVNORAINCLASSIC[$idx]} is 0 (or null) - classic raincheck for ${EVLABEL[$idx]} enabled\n\tCONFLICTS with \${EVNORAINQTY[$idx]} - two methods will check rain"
 				return 1
 			else
-                        	en_echo "NORMAL: \${EVNORAINCLASSIC[$idx]} is 1 - classic raincheck for ${EVLABEL[$idx]} is disabled"
+                        	silent || en_echo "NORMAL: \${EVNORAINCLASSIC[$idx]} is 1 - classic raincheck for ${EVLABEL[$idx]} is disabled"
                         	return 0
 			fi
                 else
-                        en_echo "WARNING: \${EVNORAINQTY[$idx]} is 1 - no raincheck QTY for ${EVLABEL[$idx]}"
+                        silent || en_echo "WARNING: \${EVNORAINQTY[$idx]} is 1 - no raincheck QTY for ${EVLABEL[$idx]}"
 			if [[ -z ${EVNORAINCLASSIC[$idx]} || ${EVNORAINCLASSIC[$idx]} = 0 ]] ; then
-                        	en_echo "WARNING: \${EVNORAINCLASSIC[$idx]} is 0 (or null) - classic raincheck for ${EVLABEL[$idx]} enabled"
+                        	silent || en_echo "WARNING: \${EVNORAINCLASSIC[$idx]} is 0 (or null) - classic raincheck for ${EVLABEL[$idx]} enabled"
 			else
-                        	en_echo "WARNING: \${EVNORAINCLASSIC[$idx]} is 1 - classic raincheck for ${EVLABEL[$idx]} is disabled"
+                        	silent || en_echo "WARNING: \${EVNORAINCLASSIC[$idx]} is 1 - classic raincheck for ${EVLABEL[$idx]} is disabled"
 			fi
 			return 1
                 fi
         else
-                en_echo 'NORMAL: $RAIN_GPIO is not "drv:rainsensorqty" or "$autostoprain" - no raincheck'
+                silent || en_echo 'NORMAL: $RAIN_GPIO is not "drv:rainsensorqty" or "$autostoprain" - no raincheck'
 		return 1
         fi
 }

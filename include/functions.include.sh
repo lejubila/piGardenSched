@@ -3,7 +3,8 @@
 # "functions.include.sh"
 # Author: androtto
 # VERSION=0.3.6
-# 2020/01/19: add EV#_PROGRESSIVE variables parsing
+# 2020/03/25: added check_testfile function & check
+# 2020/01/19: added EV#_PROGRESSIVE variables parsing
 # 2019/09/12: setTMP_PATH added
 # 2019/09/02: rain delay fixed 
 # 2019/09/02: irrigation history improved - now it accepts ev_alias to display
@@ -251,16 +252,16 @@ getidx()
 	declare -g idx
 	local where=$1
 	local what=$2
-	for ((numline=1;numline<=maxline;numline++))
+	for ((ii=1;ii<=maxline;ii++))
         do
 		case $where in
-			evlabel) if [[ $what = ${EVLABEL[$numline]} ]] ; then
-					(( idx = numline ))
+			evlabel) if [[ $what = ${EVLABEL[$ii]} ]] ; then
+					(( idx = ii ))
 					return 0
 				 fi
 				 ;;
-			evalias) if [[ $what = ${EVALIAS[$numline]} ]] ; then
-					(( idx = numline ))
+			evalias) if [[ $what = ${EVALIAS[$ii]} ]] ; then
+					(( idx = ii ))
 					return 0
 				 fi
 		esac
@@ -327,16 +328,6 @@ irrigazione()
 				echo "ERROR: in function \"getidx evalias \$evalias ($evalias)\" "
 			fi
 
-			#loop for getting EVLABEL
-#		        for ((i=1;i<=maxline;i++))
-#       			do
-#				if [[ ${EVALIAS[$i]} = $evalias ]] ; then
-#					: # $i set correctly when exiting
-#					break
-#				fi
-#        		done
-#			#end loop for getting EVLABEL - $i now set 
-
 			if [[ ${EVPROGRESSIVE[$idx]} == 1 || $prevprog == 1 ]] ; then
 				prevprog=1
 				#verbose && echo "progressive irrigation enabled"
@@ -358,7 +349,7 @@ irrigazione()
 		echo "$(date) - WARNING: $type irrigation for $evlist_label EV ( scheduled EV is ${EVLABEL[$numline]} ) is INACTIVE - irrigation skipped"
 		return 1
 	else
-		echo "$(date) - $type irrigation for $evlist_label EV ( scheduled EV is ${EVLABEL[$numline]} ) is running"
+		echo "$(date) - $type irrigation for $evlist_label EV(s) ( scheduled EV is ${EVLABEL[$numline]} ) is running"
 
 		echo "$(date) - EV ${EVLABEL[$numline]} lastrun updated with \"${date_now}\" timestamp"
 		statupdate_sched
@@ -382,6 +373,8 @@ do
 			echo # per rendere leggibile il log file
 			debug && echo "DEBUG: now is $now"
 			echo "DEBUG: now is $now"
+
+			check_testflag
 
 			statfile=$STATDIR/${EVALIAS[$numline]}-${time_sched}.lastrun
 			histfile=$STATDIR/${EVALIAS[$numline]}-${time_sched}.history
@@ -1049,4 +1042,12 @@ irrigation_history()
 			tail -$number_of_events $histfile | show_irrigations
 		fi
 	done
+}
+
+check_testflag()
+{
+		local testflag=$DIR_SCRIPT/include/TEST
+                if [[ -f $testflag ]] ; then
+                         echo "WARNING: TEST flag \"$testflag\" found - piGarden.sh open/close will NOT executed"
+                fi
 }

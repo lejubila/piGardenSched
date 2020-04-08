@@ -3,10 +3,10 @@
 # pigarden sched
 # main script "piGardenSched.sh"
 # Author: androtto
-# VERSION=0.3.3
+# VERSION=0.3.6
 VERSION=0
 SUB_VERSION=3
-RELEASE_VERSION=3
+RELEASE_VERSION=6
 # 2019/09/13: TMPDIR changed
 # 2019/08/13: irrigation option has improved
 

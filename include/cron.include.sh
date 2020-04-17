@@ -2,13 +2,14 @@
 # piGardenSched
 # "cron.include.sh"
 # Author: androtto
-# VERSION=0.3.6
-# 2020/09/19 cron_check fixed
+# VERSION=0.3.6c
+# 2020/04/17 cron functions fixed
+# 2019/09/19 cron_check fixed
 
-pigardensched="$DIR_SCRIPT/$NAME_SCRIPT"
+pigardensched_sh="$DIR_SCRIPT/$NAME_SCRIPT"
 logpigardensched="$LOGDIR/${NAME_SCRIPT//[.]*/}.log"
 tmpcronoutput="$TMPDIR/crontab.output"
-cronentry="* * * * * $pigardensched >> $logpigardensched 2>&1"
+cronentry="* * * * * $pigardensched_sh >> $logpigardensched 2>&1"
 echo "$cronentry" > "$DIR_SCRIPT/conf/line_to_add-crontab"
 
 
@@ -26,12 +27,12 @@ cron_check()
 	#echo "$cronentrychecked"
 
 	if [ -n "$( $CRONTAB -l | $GREP "$cronentry" )" ] ; then
-		if [ -n "$( $CRONTAB -l | $GREP ^"$cronentry"$ )" ] ; then
+		if [ -n "$( $CRONTAB -l | $GREP -E ^"$cronentry"$ )" ] ; then
 			echo "NORMAL: crontab entry for $NAME_SCRIPT found and active"
 			return 0
 		else
 			echo "ERROR: crontab entry for $NAME_SCRIPT found but INACTIVE"
-			echo -e "\trun     $pigardensched crondel\n\t\t$pigardensched cronadd\n\tto fix"
+			echo -e "\trun     $pigardensched_sh crondel\n\t\t$pigardensched_sh cronadd\n\tto fix"
 			return 1
 		fi
 	else

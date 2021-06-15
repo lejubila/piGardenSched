@@ -3,13 +3,14 @@
 # pigarden sched
 # main script "piGardenSched.sh"
 # Author: androtto
-# VERSION=0.3.6c
+# VERSION=0.3.6
 VERSION=0
 SUB_VERSION=3
-RELEASE_VERSION=6c
-# 2020/04/17: fixed cron calls
+RELEASE_VERSION=6
 # 2019/09/13: TMPDIR changed
 # 2019/08/13: irrigation option has improved
+# 2021/06/15: boot option for cleanup at startup added - need to add following line in crontab manually at the moment:
+#		@reboot   /home/pi/piGardenSched/piGardenSched.sh boot >> /home/pi/piGardenSched/log/piGardenSched.log 2>&1
 
 ##### MAIN
 now=$(date +%s )
@@ -53,8 +54,9 @@ day_now="$(date --date="@$now" '+%d')"
 declare -a EV LONG TIME_SCHED DAYFREQ EVLABEL
 declare -g maxline
 
-PIGARDENSCHED_save=$TMPDIR/${NAME_SCRIPT/.sh/}_save$$ 
-PIGARDENSCHED_TMP=$TMPDIR/${NAME_SCRIPT/.sh/} ; > $PIGARDENSCHED_TMP
+pigardensched=$(basename $PIGARDENSCHED )
+PIGARDENSCHED_save=$TMPDIR/${pigardensched}_save$$ 
+PIGARDENSCHED_TMP=$TMPDIR/$pigardensched ; > $PIGARDENSCHED_TMP
 #cp -p $PIGARDENSCHED $PIGARDENSCHED_save
 if [ ! -f $PIGARDENSCHED ] ; then
         echo "WARNING: piGarden_sched Config file not found in $PIGARDENSCHED"
@@ -205,9 +207,10 @@ case $1 in
 			exit 1
 		fi
 		;;
-	cronadd) cron_del ; cron_add ; echo "NORMAL: cronadd done" ;;
-	crondel) cron_del ; echo "NORMAL: crondel done" ;;
+	cronadd) cron_del ; cron_add ;;
+	crondel) cron_del ;;
 	croncheck) cron_check && exit 0 || exit 1  ;;
+	boot) cleanup ;;
 	run|*)  
 		schedule
 		;;

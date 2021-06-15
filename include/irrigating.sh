@@ -2,7 +2,8 @@
 # piGardenSched
 # irrigating script - call piGarden.sh open/close
 # Author: androtto
-# VERSION=0.3.6
+# VERSION=0.3.6b
+# 2020/05/05: log more readable...
 # 2020/04/08: TEST flag ignored if added while irrigating
 # 2020/04/08: dir variables changed
 # 2020/04/08: check_openev function added
@@ -80,7 +81,7 @@ if [[ $# = 0 ]] ; then
 	exit 1
 fi
 
-echo "called $DIR_SCRIPT/$NAME_SCRIPT $*"
+echo -e "\ncalled $INCLUDE_DIR_SCRIPT/$NAME_SCRIPT $*"
 
 if [[ $# = 1 ]] ; then
 	type=SINGLE

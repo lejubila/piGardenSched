@@ -1,8 +1,8 @@
 # integration with Driver rainsensorqty - driver for measure the rain volume, for rain meter, for rain gauge
 # Author: androtto
 # file "rain.include.sh"
-# Version: 0.3.6
-# Data: 01/Jan/2020
+# Version: 0.3.6d
+# Data: 17/Jun/2020
 # la pioggia può essere gestita con 3 modalita'- impostanod le variabili in /etc/piGarden.conf
 # 1) con sensore gestito direttamente da piGarden. Impostanto la variabile con la GPIO da utilizzare:
 #	RAIN_GPIO="25"
@@ -13,6 +13,7 @@
 #	WEATHER_SERVICE="wunderground"
 # 3) con il driver rainsensorqty, valorizzando la variabile:
 #	RAIN_GPIO="drv:rainsensorqty:25" , dove il secondo campo indica quale driver attivare sotto piGarden/drv e il 3° quale GPIO usare
+# 2020/06/17: added IT WAS RAIN ONLY statement
 # 2020/04/07: added raincheck silent option
 
 rained()
@@ -67,6 +68,7 @@ raintimeframe()
 
 delayirrigation()
 {
+#set -x
 	if [[ ! -f $RAINSENSORQTY_HISTORYRAW ]] ; then
 		en_echo "NORMAL: it NEVER RAINED"
 		return 1
@@ -76,17 +78,27 @@ delayirrigation()
 	#chk_irrgtn  #seconds of scheduled irrigation
 	(( to_time_irrgtn = chk_irrgtn ))
 	
+	debug && echo now $now $(sec2date $now) 
 	debug && echo lst_irrgtn $lst_irrgtn $(sec2date $lst_irrgtn)
 	debug && echo chk_irrgtn $chk_irrgtn $(sec2date $chk_irrgtn)
 	debug && echo to_time_irrgtn $to_time_irrgtn $(sec2date $to_time_irrgtn) prima
+
+	#TZ change check
+	if [[ $( date --date="@$now" '+%Z' ) != $( date --date="@$lst_irrgtn" '+%Z' ) ]] ; then
+		echo "ERROR: timezone changed - daylight savings time known issue: please reset $statfile file"
+		return 3
+	fi
+
 
 	# correct time frame to check if chk_irrgtn isn't now
 	local delay_coefficient=0
 	while (( now != to_time_irrgtn ))
 	do
 		(( to_time_irrgtn += 24*60*60 ))
+
 		debug && echo to_time_irrgtn $to_time_irrgtn $(sec2date $to_time_irrgtn) dopo
 		(( delay_coefficient += 1 )) # needed because to_time_irrgtn was at first loop equal to chk_irrgtn
+
 	done
 	verbose && (( delay_coefficient > 0 )) && echo "$(date) - EV ${EVLABEL[$numline]} previous irrigation was delayed (now is $delay_coefficient day(s) later)"
 
@@ -131,6 +143,8 @@ delayirrigation()
 			echo "EV ${EVLABEL[$numline]} irrigation delayed $daydelayed day(s) from previous scheduling (on $(sec2date $chk_irrgtn) )"
 			(( chk_irrgtn += daydelayed*24*60*60 ))
 			return 0
+		elif (( $rainlines > 0 )) ; then
+			printf "it WAS RAINING ONLY for %.2f mm %s \n" $( $JQ -n "$rainlines * $RAINSENSORQTY_MMEACH" ) "$timeframe"
 		else
 #			verbose && printf "it WAS NOT RAINING between %s and %s \n" "$(sec2date $from_time_irrgtn)" "$(sec2date $to_time_irrgtn)" 
 			verbose && echo "it WAS NOT RAINING $timeframe"

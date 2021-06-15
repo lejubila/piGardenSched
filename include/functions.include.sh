@@ -2,7 +2,8 @@
 # piGardenSched
 # "functions.include.sh"
 # Author: androtto
-# VERSION=0.3.6
+# VERSION=0.3.6c
+# 2020/06/02: irrigation history minor fixes
 # 2020/03/25: added check_testfile function & check
 # 2020/01/19: added EV#_PROGRESSIVE variables parsing
 # 2019/09/12: setTMP_PATH added
@@ -410,6 +411,10 @@ do
 					1) : #no delay
 						;;
 					2) : #progressive enabled 
+						;;
+					3) : #error
+						echo "exit...."
+						exit 1
 						;;
 				esac
 			fi
@@ -953,21 +958,21 @@ status()
 
 history()
 {
-	#set -x
+#	set -x
 	cd $STATDIR
-	for evlabel in $( ls *.history | cut -d- -f1 | sort -u )
+	for evalias in $( ls *.history | cut -d- -f1 | sort -u )
 	do
 		local found=no
 		(( numline=1 ))
 		while (( numline <= maxline ))
 		do
-			if [[ $evlabel = ${EVLABEL[$numline]} ]] ; then
+			if [[ $evalias = ${EVALIAS[$numline]} ]] ; then
 				case ${ACTIVE[$numline]} in
-					active) echo -e "\nNORMAL: irrigation for $evlabel is at ${TIME_SCHED[$numline]//,/ } every ${DAYFREQ[$numline]} day(s) - ACTIVE" 
+					active) echo -e "\nNORMAL: irrigation for ${EVALIAS[$numline]} is at ${TIME_SCHED[$numline]//,/ } every ${DAYFREQ[$numline]} day(s) - ACTIVE" 
 						;;
-					inactive) echo -e "\nWARNING: irrigation for $evlabel is at ${TIME_SCHED[$numline]//,/ } every ${DAYFREQ[$numline]} day(s) - INACTIVE" 
+					inactive) echo -e "\nWARNING: irrigation for ${EVALIAS[$numline]} is at ${TIME_SCHED[$numline]//,/ } every ${DAYFREQ[$numline]} day(s) - INACTIVE" 
 						;;
-					*) echo -e "\nERROR: irrigation for $evlabel is at ${TIME_SCHED[$numline]//,/ } every ${DAYFREQ[$numline]} day(s) - neither ACTIVE or INACTIVE" 
+					*) echo -e "\nERROR: irrigation for ${EVALIAS[$numline]} is at ${TIME_SCHED[$numline]//,/ } every ${DAYFREQ[$numline]} day(s) - neither ACTIVE or INACTIVE" 
 					exit 1
 						;;
 				esac
@@ -982,9 +987,9 @@ history()
 			fi
 			(( numline+=1 ))
 		done
-		[[ $found = no ]] && echo -e "\nWARNING: $evlabel is NOT scheduled"
+		[[ $found = no ]] && echo -e "\nWARNING: ${EVALIAS[$numline]} is NOT scheduled"
 		echo "history of irrigations:"
-		for file in $( ls -rt ${evlabel}*.history )
+		for file in $( ls -rt ${evalias}*.history )
 		do
 			#set -- ${file//[.-]/ }
 			#evlabel=$1
@@ -1017,7 +1022,7 @@ irrigation_history()
 	if [[ -n $2 ]] ; then
 		if getidx evalias $2 ; then
 			evlabel=${EVLABEL[$idx]}
-			filelist="${evlabel}-irrigationhistory"
+			filelist="${2}-irrigationhistory"
 		else
 			echo "ERROR in funct getidx"
 		fi
@@ -1051,3 +1056,11 @@ check_testflag()
                          echo "WARNING: TEST flag \"$testflag\" found - piGarden.sh open/close will NOT executed"
                 fi
 }
+
+cleanup()
+{
+	echo -e "\n$(date) BOOTED now!"
+	echo "Removing lock files $STATDIR/.\*.lock"
+	rm -f $STATDIR/.*.lock
+}
+
